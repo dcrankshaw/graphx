@@ -170,8 +170,9 @@ object Pregel extends Logging {
       g = g.joinVertices(messages)(vprog)
       // count the iteration
       i += 1
-      logWarning("GRAPHX: PageRank completed iteration " + i + " of " + numIter)
+      // logWarning("GRAPHX: PageRank completed iteration " + i + " of " + numIter)
     }
+    logWarning("finished " + numIter + " iterations of Pregel")
     // Return the final graph
     g
   } // end of apply
