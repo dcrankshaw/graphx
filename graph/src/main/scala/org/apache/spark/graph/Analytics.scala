@@ -304,7 +304,7 @@ object Analytics extends Logging {
            println("Saving pageranks of pages to " + outFname)
            pr.vertices.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
          }
-         logWarning("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
+         logWarning("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds GREPTHIS")
          sc.stop()
        }
 
