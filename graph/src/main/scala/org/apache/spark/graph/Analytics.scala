@@ -19,7 +19,7 @@ object Analytics extends Logging {
    * Run PageRank for a fixed number of iterations returning a graph
    * with vertex attributes containing the PageRank and edge
    * attributes the normalized edge weight.
-   * 
+   *
    * The following PageRank fixed point is computed for each vertex.
    *
    * {{{
@@ -36,7 +36,7 @@ object Analytics extends Logging {
    * where `alpha` is the random reset probability (typically 0.15),
    * `inNbrs[i]` is the set of neighbors whick link to `i` and
    * `outDeg[j]` is the out degree of vertex `j`.
-   * 
+   *
    * Note that this is not the "normalized" PageRank and as a
    * consequence pages that have no inlinks will have a PageRank of
    * alpha.
@@ -53,7 +53,7 @@ object Analytics extends Logging {
    *
    */
   def pagerank[VD: Manifest, ED: Manifest](
-    graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15): 
+    graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15):
     Graph[Double, Double] = {
 
     /**
@@ -77,13 +77,13 @@ object Analytics extends Logging {
     // version of Pregel
     def vertexProgram(id: Vid, attr: Double, msgSum: Double): Double =
       resetProb + (1.0 - resetProb) * msgSum
-    def sendMessage(id: Vid, edge: EdgeTriplet[Double, Double]): Option[Double] =
-      Some(edge.srcAttr * edge.attr)
+    def sendMessage(edge: EdgeTriplet[Double, Double]) =
+      Array((edge.dstId, edge.srcAttr * edge.attr))
     def messageCombiner(a: Double, b: Double): Double = a + b
     // The initial message received by all vertices in PageRank
-    val initialMessage = 0.0 
+    val initialMessage = 0.0
 
-    // Execute pregel for a fixed number of iterations.      
+    // Execute pregel for a fixed number of iterations.
     Pregel(pagerankGraph, initialMessage, numIter)(
       vertexProgram, sendMessage, messageCombiner)
   }
@@ -108,7 +108,7 @@ object Analytics extends Logging {
    * where `alpha` is the random reset probability (typically 0.15),
    * `inNbrs[i]` is the set of neighbors whick link to `i` and
    * `outDeg[j]` is the out degree of vertex `j`.
-   * 
+   *
    * Note that this is not the "normalized" PageRank and as a
    * consequence pages that have no inlinks will have a PageRank of
    * alpha.
@@ -125,11 +125,11 @@ object Analytics extends Logging {
    * PageRank and each edge containing the normalized weight.
    */
   def deltaPagerank[VD: Manifest, ED: Manifest](
-    graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): 
+    graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15):
     Graph[Double, Double] = {
 
     /**
-     * Initialize the pagerankGraph with each edge attribute 
+     * Initialize the pagerankGraph with each edge attribute
      * having weight 1/outDegree and each vertex with attribute 1.0.
      */
     val pagerankGraph: Graph[(Double, Double), Double] = graph
@@ -137,7 +137,7 @@ object Analytics extends Logging {
       .outerJoinVertices(graph.outDegrees){
         (vid, vdata, deg) => deg.getOrElse(0)
       }
-      // Set the weight on the edges based on the degree 
+      // Set the weight on the edges based on the degree
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to (initalPR, delta = 0)
       .mapVertices( (id, attr) => (0.0, 0.0) )
@@ -152,16 +152,16 @@ object Analytics extends Logging {
       val newPR = oldPR + (1.0 - resetProb) * msgSum
       (newPR, newPR - oldPR)
     }
-    def sendMessage(id: Vid, edge: EdgeTriplet[(Double, Double), Double]): Option[Double] = {
+    def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
       if (edge.srcAttr._2 > tol) {
-        Some(edge.srcAttr._2 * edge.attr)
-      } else { None }
-    } 
+        Array((edge.dstId, edge.srcAttr._2 * edge.attr))
+      } else { Array.empty[(Vid, Double)] }
+    }
     def messageCombiner(a: Double, b: Double): Double = a + b
     // The initial message received by all vertices in PageRank
     val initialMessage = resetProb / (1.0 - resetProb)
 
-    // Execute a dynamic version of Pregel.       
+    // Execute a dynamic version of Pregel.
     Pregel(pagerankGraph, initialMessage)(
       vertexProgram, sendMessage, messageCombiner)
       .mapVertices( (vid, attr) => attr._1 )
@@ -183,26 +183,28 @@ object Analytics extends Logging {
    * @return a graph with vertex attributes containing the smallest
    * vertex in each connected component
    */
-  def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]): 
+  def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]):
     Graph[Vid, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
 
-    def sendMessage(id: Vid, edge: EdgeTriplet[Vid, ED]): Option[Vid] = {
-      val thisAttr = edge.vertexAttr(id)
-      val otherAttr = edge.otherVertexAttr(id)
-      if(thisAttr < otherAttr) { Some(thisAttr) }
-      else { None }
+    def sendMessage(edge: EdgeTriplet[Vid, ED]) = {
+      if (edge.srcAttr < edge.dstAttr) {
+        Array((edge.dstId, edge.srcAttr))
+      } else if (edge.srcAttr > edge.dstAttr) {
+        Array((edge.srcId, edge.dstAttr))
+      } else {
+        Array.empty[(Vid, Vid)]
+      }
     }
-
     val initialMessage = Long.MaxValue
-    Pregel(ccGraph, initialMessage, EdgeDirection.Both)(
+    Pregel(ccGraph, initialMessage)(
       (id, attr, msg) => math.min(attr, msg),
-      sendMessage, 
+      sendMessage,
       (a,b) => math.min(a,b)
       )
-  } // end of connectedComponents 
+  } // end of connectedComponents
 
-  
+
 
   def main(args: Array[String]) = {
     // val log4jprops = "/root/graphx/conf/log4j.properties"
@@ -216,7 +218,7 @@ object Analytics extends Logging {
         case _ => throw new IllegalArgumentException("Invalid argument: " + arg)
       }
     }
-    
+
     def setLogLevels(level: org.apache.log4j.Level, loggers: TraversableOnce[String]) = {
       loggers.map{
         loggerName =>
@@ -270,7 +272,7 @@ object Analytics extends Logging {
 
          val sc = new SparkContext(host, "PageRank(" + fname + ")")
 
-         val graph = GraphLoader.textFile(sc, fname, a => 1.0F, 
+         val graph = GraphLoader.textFile(sc, fname, a => 1.0F,
           minEdgePartitions = numEPart, minVertexPartitions = numVPart).cache()
 
          val startTime = System.currentTimeMillis
@@ -325,7 +327,7 @@ object Analytics extends Logging {
 
            val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
            //val graph = GraphLoader.textFile(sc, fname, a => 1.0F)
-           val graph = GraphLoader.textFile(sc, fname, a => 1.0F, 
+           val graph = GraphLoader.textFile(sc, fname, a => 1.0F,
             minEdgePartitions = numEPart, minVertexPartitions = numVPart).cache()
            val cc = Analytics.connectedComponents(graph)
            //val cc = if(isDynamic) Analytics.dynamicConnectedComponents(graph, numIter)

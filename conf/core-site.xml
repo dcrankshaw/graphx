@@ -12,7 +12,7 @@
 
   <property>
     <name>fs.default.name</name>
-    <value>hdfs://ec2-54-211-37-35.compute-1.amazonaws.com:9000</value>
+    <value>hdfs://ec2-54-225-24-100.compute-1.amazonaws.com:9000</value>
   </property>
 
   <property>
