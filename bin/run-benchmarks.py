@@ -69,6 +69,7 @@ def run_algo(master,
 
   start = time.time()
   proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  # TODO poll to see if dead slaves
   out, err = proc.communicate()
   end = time.time()
   full_runtime = (end - start)
@@ -98,6 +99,7 @@ def run_algo(master,
 
 def run_part_benchmark(master, strat, timing, errors):
   for i in range(5):
+    restart_cluster(master, 'no', 1)
     retries = 0
     success = False
     while (not success and retries < MAX_RETRIES):
