@@ -348,9 +348,9 @@ object GraphImpl {
     val ceilSqrt: Pid = math.ceil(math.sqrt(numPartitions)).toInt
     edges.map { e =>
       // Random partitioning based on the source vertex id.
-      // val part: Pid = edgePartitionFunction1D(e.srcId, e.dstId, numPartitions)
+      val part: Pid = edgePartitionFunction1D(e.srcId, e.dstId, numPartitions)
       // val part: Pid = edgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
-      val part: Pid = randomVertexCut(e.srcId, e.dstId, numPartitions)
+      // val part: Pid = randomVertexCut(e.srcId, e.dstId, numPartitions)
       //val part: Pid = canonicalEdgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
 
       // Should we be using 3-tuple or an optimized class
