@@ -65,7 +65,7 @@ def restart_cluster(master, recompile=''):
   success = False
   retries = 0
   while (not success and retries < MAX_RETRIES):
-    rc = subprocess.call(['/root/rebuild-graphx', recompile])
+    rc = subprocess.call(['/root/graphx/bin/rebuild-graphx', recompile])
     (aliveCount, deadCount) = countAliveSlaves(master)
     success = (aliveCount == NUM_SLAVES and deadCount == 0 and rc == 0)
     retries += 1
