@@ -247,8 +247,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         .toList
         // groups all ETs in this partition that have the same src and dst
         // Because all ETs with the same src and dst will live on the same
-        // partition due to the EdgePartitioner, this guarantees that these
-        // ET groups will be complete.
+        // partition due to the canonicalRandomVertexCut partitioner, this
+        // guarantees that these ET groups will be complete.
         .groupBy { t: EdgeTriplet[VD, ED] =>  (t.srcId, t.dstId) }
         .mapValues { ts: List[EdgeTriplet[VD, ED]] => f(ts.toIterator) }
         .toList
@@ -302,10 +302,18 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 object GraphImpl {
 
   def apply[VD: ClassManifest, ED: ClassManifest](
-    vertices: RDD[(Vid, VD)], edges: RDD[Edge[ED]],
-    defaultVertexAttr: VD):
-  GraphImpl[VD,ED] = {
-    apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a)
+    vertices: RDD[(Vid, VD)],
+    edges: RDD[Edge[ED]],
+    defaultVertexAttr: VD): GraphImpl[VD,ED] = {
+    apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a, RandomVertexCut)
+  }
+
+  def apply[VD: ClassManifest, ED: ClassManifest](
+    vertices: RDD[(Vid, VD)],
+    edges: RDD[Edge[ED]],
+    defaultVertexAttr: VD,
+    partitionStrategy: PartitionStrategy): GraphImpl[VD,ED] = {
+    apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a, partitionStrategy)
   }
 
   def apply[VD: ClassManifest, ED: ClassManifest](
@@ -313,6 +321,15 @@ object GraphImpl {
     edges: RDD[Edge[ED]],
     defaultVertexAttr: VD,
     mergeFunc: (VD, VD) => VD): GraphImpl[VD,ED] = {
+    apply(vertices, edges, defaultVertexAttr, mergeFunc, RandomVertexCut)
+  }
+
+  def apply[VD: ClassManifest, ED: ClassManifest](
+    vertices: RDD[(Vid, VD)],
+    edges: RDD[Edge[ED]],
+    defaultVertexAttr: VD,
+    mergeFunc: (VD, VD) => VD,
+    partitionStrategy: PartitionStrategy): GraphImpl[VD,ED] = {
 
     val vtable = VertexSetRDD(vertices, mergeFunc)
     /**
@@ -333,6 +350,14 @@ object GraphImpl {
     new GraphImpl(vtable, vid2pid, localVidMap, etable)
   }
 
+
+
+
+  protected def createETable[ED: ClassManifest](edges: RDD[Edge[ED]])
+    : RDD[(Pid, EdgePartition[ED])] = {
+      createETable(edges, RandomVertexCut)
+  }
+
   /**
    * Create the edge table RDD, which is much more efficient for Java heap storage than the
    * normal edges data structure (RDD[(Vid, Vid, ED)]).
@@ -341,17 +366,18 @@ object GraphImpl {
    * key-value pair: the key is the partition id, and the value is an EdgePartition object
    * containing all the edges in a partition.
    */
-  protected def createETable[ED: ClassManifest](edges: RDD[Edge[ED]])
-    : RDD[(Pid, EdgePartition[ED])] = {
+  protected def createETable[ED: ClassManifest](
+    edges: RDD[Edge[ED]],
+    partitionStrategy: PartitionStrategy): RDD[(Pid, EdgePartition[ED])] = {
     // Get the number of partitions
     val numPartitions = edges.partitions.size
-    val ceilSqrt: Pid = math.ceil(math.sqrt(numPartitions)).toInt
+
     edges.map { e =>
       // Random partitioning based on the source vertex id.
       // val part: Pid = edgePartitionFunction1D(e.srcId, e.dstId, numPartitions)
-      val part: Pid = edgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
-      // val part: Pid = randomVertexCut(e.srcId, e.dstId, numPartitions)
-      //val part: Pid = canonicalEdgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
+      // val part: Pid = edgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
+      //val part: Pid = randomVertexCut(e.srcId, e.dstId, numPartitions)
+      val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
 
       // Should we be using 3-tuple or an optimized class
       new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
@@ -566,7 +592,8 @@ object GraphImpl {
    *
    */
   protected def edgePartitionFunction2D(src: Vid, dst: Vid,
-    numParts: Pid, ceilSqrtNumParts: Pid): Pid = {
+    numParts: Pid): Pid = {
+    val ceilSqrtNumParts: Pid = math.ceil(math.sqrt(numParts)).toInt
     val mixingPrime: Vid = 1125899906842597L
     val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
     val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
@@ -582,18 +609,14 @@ object GraphImpl {
   }
 
   /**
-   * @todo This will only partition edges to the upper diagonal
-   * of the 2D processor space.
+   * Assign edges to an arbitrary machine corresponding to a random vertex cut. This
+   * function ensures that edges of opposite direction between the same two vertices
+   * will end up on the same partition.
    */
-  protected def canonicalEdgePartitionFunction2D(srcOrig: Vid, dstOrig: Vid,
-    numParts: Pid, ceilSqrtNumParts: Pid): Pid = {
-    val mixingPrime: Vid = 1125899906842597L
-    // Partitions by canonical edge direction
-    val src = math.min(srcOrig, dstOrig)
-    val dst = math.max(srcOrig, dstOrig)
-    val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
-    val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
-    (col * ceilSqrtNumParts + row) % numParts
+  protected def canonicalRandomVertexCut(src: Vid, dst: Vid, numParts: Pid): Pid = {
+    val lower = math.min(src, dst)
+    val higher = math.max(src, dst)
+    math.abs((lower, higher).hashCode()) % numParts
   }
 
 } // end of object GraphImpl
