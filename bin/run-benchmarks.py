@@ -17,6 +17,23 @@ def countAliveSlaves(master):
   deadCount = len(re.findall('DEAD', html))
   return (aliveCount, deadCount)
 
+# extracts the internal ip address and process id from a line of the form:
+# ec2-184-73-139-226.compute-1.amazonaws.com: org.apache.spark.deploy.worker.Worker running as process 3017. Stop it first.
+def extract_ip_and_pid(line):
+  words = line.split()
+  print words
+  base_ip = words[0].split('.')[0].split('-')[1:]
+  assert len(base_ip) == 4
+  ip_str = '.'.join(base_ip)
+  pid_index = 5
+  print words[pid_index - 1]
+  assert words[pid_index - 1] == 'process'
+  pid = int(words[pid_index].replace('.', ''))
+  return (ip_str, pid)
+
+
+  # need to extract ip address, pid, kill: ssh root@ip_address "kill -TERM pid"
+
 def restart_cluster(master, recompile='', allowed_attempts=MAX_RETRIES):
   print 'Restarting Cluster'
   success = False
@@ -27,14 +44,18 @@ def restart_cluster(master, recompile='', allowed_attempts=MAX_RETRIES):
     proc = subprocess.Popen(['rebuild-graphx', recompile], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     # err is redundant here
     (out, err) = proc.communicate()
-    for line in out.splitlines():
-      if 'Process' in line or 'process' in line:
-        words = line.split()
-        # need to extract ip address, pid, kill: ssh root@ip_address "kill -TERM pid"
+    print out
 
+    # rc = -1
+    for line in out.splitlines():
+      if 'process' in line:
+        print 'FINDING PID:\t' + line
+        (ip, pid) = extract_ip_and_pid(line)
+        rc = subprocess.call(['ssh', '-oStrictHostKeyChecking=no', 'root@' + ip, "'kill -9 " + str(pid) + "'"])
+        rc = subprocess.call(['kill_remote_proc.sh', ip, str(pid)])
 
     (aliveCount, deadCount) = countAliveSlaves(master)
-    success = (aliveCount == NUM_SLAVES and deadCount == 0 and rc == 0)
+    success = (aliveCount == NUM_SLAVES and deadCount == 0)
     retries += 1
   if not success:
     raise Exception('Cluster could not be resurrected')
@@ -75,7 +96,8 @@ def run_algo(master,
   (alive, dead) = countAliveSlaves(master)
   if alive != NUM_SLAVES:
     print alive, NUM_SLAVES
-    num_restarts = restart_cluster(master, recompile='no', allowed_attempts=3)
+    # num_restarts = restart_cluster(master, recompile='no', allowed_attempts=3)
+    num_restarts = restart_cluster(master, allowed_attempts=3)
 
   start = time.time()
   proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -109,7 +131,7 @@ def run_algo(master,
 
 def run_part_benchmark(master, strat, timing, errors):
   for i in range(5):
-    restart_cluster(master, 'no', 3)
+    restart_cluster(master, allowed_attempts=3)
     retries = 0
     success = False
     while (not success and retries < MAX_RETRIES):
