@@ -6,6 +6,7 @@ if [ -z "$1" ]
     cd ~/graphx; sbt/sbt assembly;
 fi
 ~/spark-ec2/copy-dir --delete ~/graphx/
+sleep 30
 ~/graphx/bin/start-all.sh
 
 

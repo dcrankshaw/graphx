@@ -29,6 +29,8 @@ def restart_cluster(master, recompile='', allowed_attempts=MAX_RETRIES):
     retries += 1
   if not success:
     raise Exception('Cluster could not be resurrected')
+  else:
+    return retries
 
 def get_master_url():
   master = ''
@@ -64,8 +66,7 @@ def run_algo(master,
   (alive, dead) = countAliveSlaves(master)
   if alive != NUM_SLAVES:
     print alive, NUM_SLAVES
-    restart_cluster(master, recompile='no', allowed_attempts=1)
-    num_restarts += 1
+    num_restarts = restart_cluster(master, recompile='no', allowed_attempts=3)
 
   start = time.time()
   proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -99,7 +100,7 @@ def run_algo(master,
 
 def run_part_benchmark(master, strat, timing, errors):
   for i in range(5):
-    restart_cluster(master, 'no', 1)
+    restart_cluster(master, 'no', 3)
     retries = 0
     success = False
     while (not success and retries < MAX_RETRIES):
@@ -126,7 +127,7 @@ def main():
   print master
   timing = ''
   error_output = ''
-  strategies = ['EdgePartition1D', 'EdgePartition2D', 'RandomVertexCut']
+  strategies = ['EdgePartition2D', 'RandomVertexCut', 'EdgePartition1D']
   for strat in strategies:
     (timing, error_output) = run_part_benchmark(master, strat, timing, error_output)
 
