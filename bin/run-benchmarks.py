@@ -23,7 +23,16 @@ def restart_cluster(master, recompile='', allowed_attempts=MAX_RETRIES):
   retries = 0
   while (not success and retries < allowed_attempts):
     # rc = subprocess.call(['/root/graphx/bin/rebuild-graphx', recompile])
-    rc = subprocess.call(['rebuild-graphx', recompile])
+    # rc = subprocess.call(['rebuild-graphx', recompile])
+    proc = subprocess.Popen(['rebuild-graphx', recompile], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # err is redundant here
+    (out, err) = proc.communicate()
+    for line in out.splitlines():
+      if 'Process' in line or 'process' in line:
+        words = line.split()
+        # need to extract ip address, pid, kill: ssh root@ip_address "kill -TERM pid"
+
+
     (aliveCount, deadCount) = countAliveSlaves(master)
     success = (aliveCount == NUM_SLAVES and deadCount == 0 and rc == 0)
     retries += 1
