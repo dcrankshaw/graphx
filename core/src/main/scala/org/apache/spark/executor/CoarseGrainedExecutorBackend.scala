@@ -77,8 +77,21 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.killTask(taskId)
       }
 
-    case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
-      logError("Driver terminated or disconnected! Shutting down.")
+    // case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
+    //   logError("Driver terminated or disconnected! Shutting down.")
+    //   System.exit(1)
+
+    case Terminated(_) =>
+      logError("Driver terminated.")
+      Thread.dumpStack()
+      System.exit(1)
+    case RemoteClientDisconnected(_, _) =>
+      logError("Remote client disconnected.")
+      Thread.dumpStack()
+      System.exit(1)
+    case RemoteClientShutdown(_, _) =>
+      logError("Remote client shutdown.")
+      Thread.dumpStack()
       System.exit(1)
 
     case StopExecutor =>

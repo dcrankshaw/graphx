@@ -231,6 +231,7 @@ object Analytics extends Logging {
      System.setProperty("spark.serializer", serializer)
      //System.setProperty("spark.shuffle.compress", "false")
      System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
+     System.setProperty("spark.akka.askTimeout", "60")
 
      taskType match {
        case "pagerank" => {
