@@ -232,4 +232,114 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     graph.outerJoinVertices(table)(uf)
   }
 
+
+  /*
+   * When doing edge contractions, after identifying edges to be contracted
+   * all edges in the graph fall into 2 disjoint sets:
+   * 
+   *    A) Edges to be contracted
+   *    B) Edges not to be contracted
+   *
+   * Based on the defined semantics of the function what to do with edges in
+   * set A is well defined. We create a (probably unconnected) subgraph G'
+   * where E' == A. We then run (undirected?) connected components on G'.
+   * Each cc will be a single vertex in the resulting coarsened graph.
+   * Once we have identified the cc's we can merge all of the edges until
+   * we have a single vertex. This can either be done in a fold like way (with
+   * an accumulator) or in a reduce like way. With reduce, we could merge edges
+   * in a k-ary tree for better parallelism (this may or may not be worth it).
+   * I'm not sure how we could parallelize fold. Finally, we need to figure out
+   * how to join the new vertices back into G, which brings us to edges in set B.
+   * B can be further divided into 4 categories:
+   *
+   *    B.1) unchanged: Edges e such that no edges in the neighborhood of either their
+   *         src or dst vertex will be contracted. No action needs to be taken with
+   *         these edges.
+   *    B.2) join edges: 1 new vertex: Edges e such that EITHER their src or dst vertex
+   *         is the src or dst vertex of at least one edge that will be contracted.
+   *         After contracting edges, this edge needs to figure out which connected
+   *         component its merged vertex src or dst ended up in and form a new edge
+   *         with this new contracted vertex. Additionally complicating things here
+   *         is that vertex u could be src of 2 edges (u,v, uv.data) and (u,w, uw.data) where both
+   *         v and w got contracted into the same cc. This means that in the resulting
+   *         graph where v and w got contracted into vertex x, there are now 2 edges
+   *         between u and x: (u,x, uv.data) and (u,x, uw.data), so these edges need to be
+   *         merged.
+   *    B.3) join edges: 2 new vertices: Edges e such that BOTH their src and dst vertices
+   *         are the src or dst vertices of at least one edge that will be contracted, but e.src
+   *         and e.dst end up in two different cc's. This edge needs to figure out which connected
+   *         component each vertex ended up in. We also may have multiple edges between these two
+   *         new vertices that would need to be merged.
+   *   B.4) self-loops: Edges e such that they have neighbors
+   *        through both their src and dst vertices that will be contracted in such a way
+   *        that their src and dst end up in the same connected component.
+   *
+   * Both B.2 and B.3 need to handle elimination of parallel edges. B.4 needs to eliminate
+   * self-loops.
+   *    
+   *
+   *
+   * In terms of dealing with parallel edges, I think it is okay to return a hypergraph.
+   * If the user wants to remove parallel edges, they can run groupEdges afterwards.
+   *
+   *
+   *
+   */
+  
+  def contractEdges(epred: EdgeTriplet[VD,ED] => Boolean,
+    contractFun: EdgeTriplet[VD,ED] => VD,
+    mergeFun: (VD, VD) => VD): Graph[VD:ED] = {
+
+    // TODO(dcrankshaw) ClosureClean.clean() funcs
+
+    val edgesToContract = graph.subgraph(epred)
+    // this should return the disjoint set of edges in set B
+    val uncontractedEdges = graph.subgraph( (et = > !epred(et)))
+    //Connected components loses the vertex data, need to figure out how to get it back
+    val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(edgesToContract)
+    // join vertex data back with connected component data
+    val ccVerticesWithData = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
+
+
+
+
+
+  }
+
+
+
+
+
 } // end of GraphOps
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
