@@ -345,7 +345,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
 
 
-
 } // end of GraphOps
 
 
