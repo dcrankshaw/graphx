@@ -311,12 +311,37 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(edgesToContract)
     // join vertex data back with connected component data
     val ccVerticesWithData = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
+    // TODO(dcrankshaw) figure out how to go from a VertexSetRDD and RDD[Edge[ED]] to a new Graph
+    // without having to rebuild index, repartition everything. Alternatively, figure out how
+    // to go from a VertexSetRDD and RDD[Edge[ED]] to RDD[EdgeTriplet] efficiently
+
+
+    // Now what I really want to do here is
+    // a) go from vertices and edges to EdgeTriplets
+    // b) the equivalent of
+    //    SELECT contract(t) FROM triplets GROUP BY t.cc
+    //  where contract is an aggregation function
+    val contractedVertices = triplets.groupBy((t => t.srcAttr))
+      .map {case (k, vs) => 
+
+    // Now I get why we want a contractFun and a mergeFun
+    // Step 1: contract all edge triplets - we now have a set of unrelated vertex data objects
+    // Step 2: merge all of those vertex data objects into a single new vertex
+
+
+
+
+
+    //val ccAndDataGraph = Graph(ccVerticesWithData, edgesToContract.edges)
+
 
 
 
 
 
   }
+
+  private def contractConnectedComponent(Seq[
 
 
 
