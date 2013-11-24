@@ -199,4 +199,63 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     assert(edgePartitionSorted.sorted)
     assert(edgePartitionSorted.iterator.map(_.copy()).toList === sortedEdges)
   }
+
+  test("contractEdges") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+
+
+      val vertices = sc.parallelize((0 to 10).map(x => (x.toLong, 1)))
+      val rawEdges = Seq(Edge(1,2,1),Edge(2,3,1),Edge(3,1,1),Edge(2,4,0),Edge(4,3,0),
+                                    Edge(5,4,0),Edge(4,6,0),Edge(6,7,0),Edge(8,3,0),Edge(8,7,0),
+                                    Edge(10,1,0),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
+      val edges = sc.parallelize(rawEdges)
+      val g: Graph[Int,Int] = Graph(vertices, edges)
+      val g1 = g.contractEdges({ (et: EdgeTriplet[Int,Int]) => (et.attr == 1) },
+      { (et: EdgeTriplet[Int,Int]) => et.attr }, { (u: Int, v: Int) => u + v })
+
+
+      //val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
+      //val b = VertexSetRDD(a).mapValues(x => -x)
+      //assert(b.count === 101)
+      //assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
+      //val c = VertexSetRDD(a, b.index)
+      //assert(b.leftJoin(c){ (id, b, cOpt) => b + cOpt.get }.map(x=> x._2).reduce(_+_) === 0)
+      //val d = c.filter(q => ((q._2 % 2) == 0))
+      //val e = a.filter(q => ((q._2 % 2) == 0))
+      //assert(d.count === e.count)
+      //assert(b.zipJoin(c)((id, b, c) => b + c).map(x => x._2).reduce(_+_) === 0)
+
+    }
+  }
+
+
+
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
