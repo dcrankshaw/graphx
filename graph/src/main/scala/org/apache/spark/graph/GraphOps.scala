@@ -321,51 +321,106 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    *
    *
    */
-  
-  def contractEdges(epred: EdgeTriplet[VD,ED] => Boolean,
-    contractFun: EdgeTriplet[VD,ED] => VD,
-    mergeFun: (VD, VD) => VD): Graph[VD:ED] = {
 
+
+  // TODO(dcrankshaw) worry about efficiency - specifically indexes and shuffling 
+  def contractEdges(epred: EdgeTriplet[VD,ED] => Boolean,
+    contractF: EdgeTriplet[VD,ED] => VD,
+    //mergeF: (VD, VD) => VD): Graph[VD:ED] = {
+    mergeF: (VD, VD) => VD) = {
+
+
+    ClosureCleaner.clean(epred)
+    ClosureCleaner.clean(contractF)
+    ClosureCleaner.clean(mergeF)
     // TODO(dcrankshaw) ClosureClean.clean() funcs
 
+    // subgraph gets re-indexed so worrying about indices might not be a huge deal
     val edgesToContract = graph.subgraph(epred)
     // this should return the disjoint set of edges in set B
-    val uncontractedEdges = graph.subgraph( (et = > !epred(et)))
+    val uncontractedEdges = graph.subgraph( {case(et) =>  !epred(et)})
     //Connected components loses the vertex data, need to figure out how to get it back
-    val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(edgesToContract)
+    val ccGraph: Graph[Vid, ED] = connectedComponents()
+    //val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(edgesToContract)
     // join vertex data back with connected component data
-    val ccVerticesWithData = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
-    // TODO(dcrankshaw) figure out how to go from a VertexSetRDD and RDD[Edge[ED]] to a new Graph
-    // without having to rebuild index, repartition everything. Alternatively, figure out how
-    // to go from a VertexSetRDD and RDD[Edge[ED]] to RDD[EdgeTriplet] efficiently
+    //val ccVerticesWithData = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
+     ////TODO(dcrankshaw) might be able to make this Graph.apply() more efficient by reusing index
+    //val ccWithDataGraph = Graph(ccVerticesWithData, edgesToContract.edges)
+    //val triplets = ccWithDataGraph.triplets
 
 
-    // Now what I really want to do here is
+
+
+
+    // What I really want to do here is
     // a) go from vertices and edges to EdgeTriplets
     // b) the equivalent of
     //    SELECT contract(t) FROM triplets GROUP BY t.cc
     //  where contract is an aggregation function
-    val contractedVertices = triplets.groupBy((t => t.srcAttr))
-      .map {case (k, vs) => 
-
-    // Now I get why we want a contractFun and a mergeFun
-    // Step 1: contract all edge triplets - we now have a set of unrelated vertex data objects
-    // Step 2: merge all of those vertex data objects into a single new vertex
 
 
 
+    // RDD[(Vid, Seq[EdgeTriplet[VD,ED]])]
+      // this contracts every connected component into a single (Vid, VD)
+    //val contractedVertices = triplets.groupBy((t => t.srcAttr))
+    //  .map { case (ccID, component) => (ccID, component.map(contractF).reduce(mergeF)) }
+
+    //contractedVertices
 
 
-    //val ccAndDataGraph = Graph(ccVerticesWithData, edgesToContract.edges)
-
-
+    // Now join vertices
+    // Maybe the best way to do this is a hash join??????
 
 
 
 
   }
 
-  private def contractConnectedComponent(Seq[
+  // TODO(dcrankshaw) remove - unused
+  private def contractConnectedComponent(component: Seq[EdgeTriplet[VD,ED]],
+    contractF: EdgeTriplet[VD,ED] => VD,
+    mergeF: (VD,VD) => VD): VD = {
+      component.map(contractF).reduce(mergeF)
+
+
+  }
+
+
+  /**
+   * Compute the connected component membership of each vertex and
+   * return an RDD with the vertex value containing the lowest vertex
+   * id in the connected component containing that vertex.
+   *
+   * @tparam VD the vertex attribute type (discarded in the
+   * computation)
+   * @tparam ED the edge attribute type (preserved in the computation)
+   *
+   * @param graph the graph for which to compute the connected
+   * components
+   *
+   * @return a graph with vertex attributes containing the smallest
+   * vertex in each connected component
+   */
+  def connectedComponents():
+    Graph[Vid, ED] = {
+    val ccGraph = graph.mapVertices { case (vid, _) => vid }
+
+    def sendMessage(edge: EdgeTriplet[Vid, ED]) = {
+      if (edge.srcAttr < edge.dstAttr) {
+        Array((edge.dstId, edge.srcAttr))
+      } else if (edge.srcAttr > edge.dstAttr) {
+        Array((edge.srcId, edge.dstAttr))
+      } else {
+        Array.empty[(Vid, Vid)]
+      }
+    }
+    val initialMessage = Long.MaxValue
+    Pregel(ccGraph, initialMessage)(
+      (id, attr, msg) => math.min(attr, msg),
+      sendMessage,
+      (a,b) => math.min(a,b)
+      )
+  } // end of connectedComponents
 
 
 
