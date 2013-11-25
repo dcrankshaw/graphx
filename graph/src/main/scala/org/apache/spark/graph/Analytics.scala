@@ -161,6 +161,7 @@ object Analytics extends Logging {
          options.foreach{
            case ("numEPart", v) => numEPart = v.toInt
            case ("numVPart", v) => numVPart = v.toInt
+           case ("dynamic", v) => true
            case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
          }
@@ -170,10 +171,12 @@ object Analytics extends Logging {
          val sc = new SparkContext(host, "TriangleCount(" + fname + ")")
          val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
            minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
-         val triangles = TriangleCount.run(graph)
+         val startTime = System.currentTimeMillis
+         val triangles = Analytics.triangleCount(graph)
          println("Triangles: " + triangles.vertices.map {
             case (vid,data) => data.toLong
           }.reduce(_+_) / 3)
+         logWarning("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
          sc.stop()
        }
 
