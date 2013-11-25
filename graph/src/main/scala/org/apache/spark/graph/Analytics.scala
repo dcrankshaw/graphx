@@ -46,6 +46,8 @@ object Analytics extends Logging {
     }
 //       setLogLevels(org.apache.log4j.Level.DEBUG, Seq("org.apache.spark"))
 
+     org.apache.log4j.Logger.getRootLogger.setLevel(org.apache.log4j.Level.WARN)
+
      val serializer = "org.apache.spark.serializer.KryoSerializer"
      System.setProperty("spark.serializer", serializer)
      //System.setProperty("spark.shuffle.compress", "false")
@@ -92,21 +94,19 @@ object Analytics extends Logging {
           minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
 
          val startTime = System.currentTimeMillis
-         println("GRAPHX: starting tasks")
-         println("GRAPHX: Number of vertices " + graph.vertices.count)
-         println("GRAPHX: Number of edges " + graph.edges.count)
+         logWarning("GRAPHX: starting tasks")
+         logWarning("GRAPHX: Number of vertices " + graph.vertices.count)
+         logWarning("GRAPHX: Number of edges " + graph.edges.count)
 
          //val pr = Analytics.pagerank(graph, numIter)
-          val pr = if(isDynamic) PageRank.runUntillConvergence(graph, tol, numIter)
-            else  PageRank.run(graph, numIter)
-         println("GRAPHX: Total rank: " + pr.vertices.map{ case (id,r) => r }.reduce(_+_) )
+          val pr = if(isDynamic) Analytics.deltaPagerank(graph, tol, numIter)
+            else  Analytics.pagerank(graph, numIter)
+         logWarning("GRAPHX: Total rank: " + pr.vertices.map{ case (id,r) => r }.reduce(_+_) )
          if (!outFname.isEmpty) {
            println("Saving pageranks of pages to " + outFname)
            pr.vertices.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
          }
-         println("GRAPHX: Runtime: " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
-
-         Thread.sleep(100000)
+         logWarning("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
 
          sc.stop()
        }
