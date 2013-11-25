@@ -49,6 +49,8 @@ object Analytics extends Logging {
        }
     }
 
+     org.apache.log4j.Logger.getRootLogger.setLevel(org.apache.log4j.Level.WARN)
+
      val serializer = "org.apache.spark.serializer.KryoSerializer"
      System.setProperty("spark.serializer", serializer)
      //System.setProperty("spark.shuffle.compress", "false")
