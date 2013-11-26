@@ -299,6 +299,8 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
 
   // TODO(dcrankshaw) worry about efficiency - specifically indexes and shuffling 
+  // TODO(dcrankshaw) In the future, we could provide the option for a user to supply
+  // a function to eliminate self-edges
   def contractEdges(epred: EdgeTriplet[VD,ED] => Boolean,
     contractF: EdgeTriplet[VD,ED] => VD,
     //mergeF: (VD, VD) => VD): Graph[VD:ED] = {
@@ -317,13 +319,15 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
     // Connected components graph has Vid as vertex data
     val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(edgesToContract)
-    //val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(graph)
+
 
 
 
     // join vertex data back with connected component data
     val ccVerticesWithData = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
-     ////TODO(dcrankshaw) might be able to make this Graph.apply() more efficient by reusing index
+    // TODO(dcrankshaw) might be able to make this Graph.apply() more efficient by reusing index
+    // Alternatively, Joey's proposed partitioning change (we assume the graph is already partitioned)
+    // might address this
     val ccWithDataGraph = Graph(ccVerticesWithData, edgesToContract.edges)
     val triplets: RDD[EdgeTriplet[(Vid,VD),ED]] = ccWithDataGraph.triplets
 
@@ -345,19 +349,22 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
     // RDD[(Vid, Seq[EdgeTriplet[VD,ED]])]
     // this contracts every connected component into a single (Vid, VD)
-    val contractedVertices1: RDD[(Vid, Seq[EdgeTriplet[(Vid,VD),ED]])]  = triplets.groupBy((t => t.srcAttr._1))
-    val contractedVertices2: RDD[(Vid, VD)] =
-      contractedVertices1.map { case (ccID, verts) => {
+    val groupedVertices: RDD[(Vid, Seq[EdgeTriplet[(Vid,VD),ED]])]  = triplets.groupBy((t => t.srcAttr._1))
+    val contractedVertices: RDD[(Vid, VD)] = groupedVertices.map { case (ccID, verts) => {
         val reducedVertex: VD = verts.map(contractTriplet).reduce(mergeF)
         (ccID, reducedVertex)
       }
     }
 
 
+    //---------------------------------------------------------------------------------
 
-    // Now join vertices
-    // Maybe the best way to do this is a hash join??????
+    // Join this with contracted vertex data so I have a map of
+    // uncontractedVid -> (contractedVid, contractedVD)
+    val vertexToContractedVertexMap: RDD[(Vid,(Vid,VD))] = ccGraph.vertices.join
 
+    // Then (outer? left?)join vertexToContractedVertexMap to uncontractedEdges, substituting
+    // ccID for Vid - this step might require a subgraph step or something? TBD
 
 
 
