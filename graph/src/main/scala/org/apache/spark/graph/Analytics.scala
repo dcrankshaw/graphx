@@ -14,6 +14,7 @@ import org.apache.spark.graph.algorithms._
  */
 object Analytics extends Logging {
 
+ Compiles up until point where I have new, contracted vertices. Still needs joins.
   def main(args: Array[String]) = {
     val host = args(0)
     val taskType = args(1)
