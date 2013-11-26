@@ -298,7 +298,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    *
    */
 
-
   // TODO(dcrankshaw) worry about efficiency - specifically indexes and shuffling 
   def contractEdges(epred: EdgeTriplet[VD,ED] => Boolean,
     contractF: EdgeTriplet[VD,ED] => VD,
