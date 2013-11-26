@@ -182,7 +182,7 @@ object Analytics extends Logging {
    * @return a graph with vertex attributes containing the smallest
    * vertex in each connected component
    */
-  def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]):
+  def connectedComponents[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]):
     Graph[Vid, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
 
