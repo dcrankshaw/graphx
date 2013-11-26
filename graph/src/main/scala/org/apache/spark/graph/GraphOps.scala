@@ -339,18 +339,28 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     val edgesToContract = graph.subgraph(epred)
     // this should return the disjoint set of edges in set B
     val uncontractedEdges = graph.subgraph( {case(et) =>  !epred(et)})
-    //Connected components loses the vertex data, need to figure out how to get it back
-    val ccGraph: Graph[Vid, ED] = connectedComponents()
-    //val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(edgesToContract)
+
+    // Connected components graph has Vid as vertex data
+    val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(edgesToContract)
+    //val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(graph)
+
+
+
     // join vertex data back with connected component data
-    //val ccVerticesWithData = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
+    val ccVerticesWithData = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
      ////TODO(dcrankshaw) might be able to make this Graph.apply() more efficient by reusing index
-    //val ccWithDataGraph = Graph(ccVerticesWithData, edgesToContract.edges)
-    //val triplets = ccWithDataGraph.triplets
+    val ccWithDataGraph = Graph(ccVerticesWithData, edgesToContract.edges)
+    val triplets: RDD[EdgeTriplet[(Vid,VD),ED]] = ccWithDataGraph.triplets
 
-
-
-
+    def contractTriplet(edge: EdgeTriplet[(Vid,VD),ED]): VD = {
+      val et = new EdgeTriplet[VD, ED]
+      et.srcId = edge.srcId
+      et.srcAttr = edge.srcAttr._2
+      et.dstId = edge.dstId
+      et.dstAttr = edge.dstAttr._2
+      et.attr = edge.attr
+      contractF(et)
+    }
 
     // What I really want to do here is
     // a) go from vertices and edges to EdgeTriplets
@@ -358,14 +368,16 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     //    SELECT contract(t) FROM triplets GROUP BY t.cc
     //  where contract is an aggregation function
 
-
-
     // RDD[(Vid, Seq[EdgeTriplet[VD,ED]])]
-      // this contracts every connected component into a single (Vid, VD)
-    //val contractedVertices = triplets.groupBy((t => t.srcAttr))
-    //  .map { case (ccID, component) => (ccID, component.map(contractF).reduce(mergeF)) }
+    // this contracts every connected component into a single (Vid, VD)
+    val contractedVertices1: RDD[(Vid, Seq[EdgeTriplet[(Vid,VD),ED]])]  = triplets.groupBy((t => t.srcAttr._1))
+    val contractedVertices2: RDD[(Vid, VD)] =
+      contractedVertices1.map { case (ccID, verts) => {
+        val reducedVertex: VD = verts.map(contractTriplet).reduce(mergeF)
+        (ccID, reducedVertex)
+      }
+    }
 
-    //contractedVertices
 
 
     // Now join vertices
@@ -375,54 +387,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
 
   }
-
-  // TODO(dcrankshaw) remove - unused
-  private def contractConnectedComponent(component: Seq[EdgeTriplet[VD,ED]],
-    contractF: EdgeTriplet[VD,ED] => VD,
-    mergeF: (VD,VD) => VD): VD = {
-      component.map(contractF).reduce(mergeF)
-
-
-  }
-
-
-  /**
-   * Compute the connected component membership of each vertex and
-   * return an RDD with the vertex value containing the lowest vertex
-   * id in the connected component containing that vertex.
-   *
-   * @tparam VD the vertex attribute type (discarded in the
-   * computation)
-   * @tparam ED the edge attribute type (preserved in the computation)
-   *
-   * @param graph the graph for which to compute the connected
-   * components
-   *
-   * @return a graph with vertex attributes containing the smallest
-   * vertex in each connected component
-   */
-  def connectedComponents():
-    Graph[Vid, ED] = {
-    val ccGraph = graph.mapVertices { case (vid, _) => vid }
-
-    def sendMessage(edge: EdgeTriplet[Vid, ED]) = {
-      if (edge.srcAttr < edge.dstAttr) {
-        Array((edge.dstId, edge.srcAttr))
-      } else if (edge.srcAttr > edge.dstAttr) {
-        Array((edge.srcId, edge.dstAttr))
-      } else {
-        Array.empty[(Vid, Vid)]
-      }
-    }
-    val initialMessage = Long.MaxValue
-    Pregel(ccGraph, initialMessage)(
-      (id, attr, msg) => math.min(attr, msg),
-      sendMessage,
-      (a,b) => math.min(a,b)
-      )
-  } // end of connectedComponents
-
-
 
 
 } // end of GraphOps
