@@ -252,6 +252,9 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "com.twitter" % "algebird-core_2.9.2" % "0.1.11",
 
+      // "org.apache.mahout" % "mahout-examples" % "0.8",
+      "org.apache.mahout" % "mahout-integration" % "0.8" ,
+
       "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm),
 
       "org.apache.cassandra" % "cassandra-all" % "1.2.5"
