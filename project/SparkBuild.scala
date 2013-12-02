@@ -245,15 +245,14 @@ object SparkBuild extends Build {
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
+    // libraryDependencies += "org.apache.mahout" % "mahout-integration" % "0.8"
   )
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
     libraryDependencies ++= Seq(
-      "com.twitter" % "algebird-core_2.9.2" % "0.1.11",
 
-      // "org.apache.mahout" % "mahout-examples" % "0.8",
-      "org.apache.mahout" % "mahout-integration" % "0.8" ,
+      "com.twitter" % "algebird-core_2.9.2" % "0.1.11",
 
       "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm),
 
@@ -266,7 +265,9 @@ object SparkBuild extends Build {
         exclude("log4j","log4j")
         exclude("org.apache.cassandra.deps", "avro")
         excludeAll(excludeSnappy)
-        excludeAll(excludeCglib)
+        excludeAll(excludeCglib),
+        
+      "org.apache.mahout" % "mahout-integration" % "0.8"
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
