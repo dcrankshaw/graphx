@@ -244,6 +244,10 @@ object SparkBuild extends Build {
 
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
+    libraryDependencies ++= Seq(
+      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm),
+      "org.apache.mahout" % "mahout-integration" % "0.8"
+    ),
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
     // libraryDependencies += "org.apache.mahout" % "mahout-integration" % "0.8"
   )
