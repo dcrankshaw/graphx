@@ -7,6 +7,7 @@ import org.apache.spark.graph.examples._
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.graph._
+import scala.collection.immutable.HashSet
 
 class GraphKryoRegistrator extends KryoRegistrator {
 
@@ -23,6 +24,7 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[VertexAttributeBlock[Object]])
     kryo.register(classOf[PartitionStrategy])
     kryo.register(classOf[WikiArticle])
+    kryo.register(classOf[HashSet[Edge[Double]]])
 
     // This avoids a large number of hash table lookups.
     kryo.setReferences(false)
