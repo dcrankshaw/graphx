@@ -11,16 +11,16 @@ import org.apache.spark.serializer.KryoRegistrator
 
 
 class WikiArticle(wtext: String) extends Serializable {
-  val links: Array[String] = WikiArticle.parseLinks(wtext)
+  @transient val links: Array[String] = WikiArticle.parseLinks(wtext)
   @transient val neighbors = links.map(WikiArticle.titleHash).distinct
   @transient lazy val redirect: Boolean = !WikiArticle.redirectPattern.findFirstIn(wtext).isEmpty
   @transient lazy val stub: Boolean = !WikiArticle.stubPattern.findFirstIn(wtext).isEmpty
   @transient lazy val disambig: Boolean = !WikiArticle.disambigPattern.findFirstIn(wtext).isEmpty
   val relevant: Boolean = !(redirect || stub || disambig)
   @transient lazy val tiXML = WikiArticle.titlePattern.findFirstIn(wtext).getOrElse("")
-  val title = XML.loadString(tiXML).text
+  val title: String = XML.loadString(tiXML).text
   val vertexID: Vid = WikiArticle.titleHash(title)
-  val edges = neighbors.map { n => Edge(vertexID, n, 1.0) }
+  val edges: Set[Edge[Double]] = neighbors.map { n => Edge(vertexID, n, 1.0) }.toSet
 }
 
 object WikiArticle {

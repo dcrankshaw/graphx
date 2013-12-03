@@ -20,7 +20,7 @@ object AnalyzeWikipedia extends Logging {
     val fname = args(1)
     val numparts = {
       if (args.length >= 3) {
-        args(2)
+        args(2).toInt
       } else {
         64
       }
@@ -30,7 +30,8 @@ object AnalyzeWikipedia extends Logging {
     val sc = new SparkContext(host, "AnalyzeWikipedia")
 
 
-    val conf = new Configuration conf.set("key.value.separator.in.input.line", " ");
+    val conf = new Configuration
+    conf.set("key.value.separator.in.input.line", " ");
     conf.set("xmlinput.start", "<page>");
     conf.set("xmlinput.end", "</page>");
 
@@ -47,6 +48,9 @@ object AnalyzeWikipedia extends Logging {
     val edges = wikiRDD.flatMap { art => art.edges }
 
     val g = Graph(vertices, edges)
+    println(g.triplets.count)
+
+    sc.stop()
   }
 
 
