@@ -7,6 +7,7 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.conf.Configuration
 import org.apache.mahout.text.wikipedia._
+import org.apache.spark.rdd.RDD
 
 
 object AnalyzeWikipedia extends Logging {
@@ -45,10 +46,12 @@ object AnalyzeWikipedia extends Logging {
 
     val vertices = wikiRDD.map { art => (art.vertexID, art.title) }
 
-    val edges = wikiRDD.flatMap { art => art.edges }
+    val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
+    println(edges.count)
 
     val g = Graph(vertices, edges)
-    println(g.triplets.count)
+    // val ct = g.triplets.count
+    // println(ct)
 
     sc.stop()
   }
