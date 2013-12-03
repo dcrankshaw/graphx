@@ -7,6 +7,8 @@ import scala.util.matching.Regex
 import scala.collection.mutable
 import scala.xml._
 import org.apache.spark.serializer.KryoRegistrator
+// import org.apache.spark.util.collection.OpenHashSet
+import scala.collection.immutable.HashSet
 
 
 
@@ -20,7 +22,11 @@ class WikiArticle(wtext: String) extends Serializable {
   @transient lazy val tiXML = WikiArticle.titlePattern.findFirstIn(wtext).getOrElse("")
   val title: String = XML.loadString(tiXML).text
   val vertexID: Vid = WikiArticle.titleHash(title)
-  val edges: Set[Edge[Double]] = neighbors.map { n => Edge(vertexID, n, 1.0) }.toSet
+  val edges: HashSet[Edge[Double]] = {
+    val temp = neighbors.map { n => Edge(vertexID, n, 1.0) }
+    val set = new HashSet[Edge[Double]]() ++ temp
+    set
+  }
 }
 
 object WikiArticle {
