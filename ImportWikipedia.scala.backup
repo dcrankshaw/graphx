@@ -1,0 +1,30 @@
+import org.apache.spark._
+import org.apache.spark.rdd.NewHadoopRDD
+import org.apache.hadoop.io.LongWritable
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.conf.Configuration
+import org.apache.mahout.text.wikipedia._
+
+val conf = new Configuration conf.set("key.value.separator.in.input.line", " ");
+conf.set("xmlinput.start", "<page>");
+conf.set("xmlinput.end", "</page>");
+// val path = args(1)
+// val path = "hdfs://ec2-54-242-6-18.compute-1.amazonaws.com:9000/enwiki-latest-pages-articles.xml"
+val path = "hdfs://ec2-54-211-202-9.compute-1.amazonaws.com:9000/enwiki_top5000.xml"
+
+val wikiRDD = sc.newAPIHadoopFile(path, classOf[XmlInputFormat], classOf[LongWritable], classOf[Text], conf)
+
+val ct = wikiRDD.count()
+
+val first = wikiRDD.first
+val anarch = wikiRDD.take(2)(1)
+
+def stringify(tup: (org.apache.hadoop.io.LongWritable, org.apache.hadoop.io.Text)): String = {
+  tup._2.toString
+}
+
+    // println(ct)
+// 
+
+
+
