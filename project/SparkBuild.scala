@@ -280,7 +280,11 @@ object SparkBuild extends Build {
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def graphSettings = sharedSettings ++ Seq(
-    name := "spark-graphx"
+    name := "spark-graphx",
+    libraryDependencies ++= Seq(
+      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm),
+      "org.apache.mahout" % "mahout-integration" % "0.8"
+    )
   )
 
   def bagelSettings = sharedSettings ++ Seq(
