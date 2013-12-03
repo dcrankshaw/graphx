@@ -3,6 +3,7 @@ package org.apache.spark.graph
 import com.esotericsoftware.kryo.Kryo
 
 import org.apache.spark.graph.impl._
+import org.apache.spark.graph.examples._
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.BoundedPriorityQueue
@@ -21,6 +22,7 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[VertexAttributeBlock[Object]])
     kryo.register(classOf[PartitionStrategy])
     kryo.register(classOf[BoundedPriorityQueue[Object]])
+    kryo.register(classOf[WikiArticle])
 
     // This avoids a large number of hash table lookups.
     kryo.setReferences(false)
