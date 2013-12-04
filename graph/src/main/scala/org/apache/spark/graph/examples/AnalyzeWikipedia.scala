@@ -27,6 +27,9 @@ object AnalyzeWikipedia extends Logging {
       }
     }
 
+   val serializer = "org.apache.spark.serializer.KryoSerializer"
+   System.setProperty("spark.serializer", serializer)
+   System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
 
     val sc = new SparkContext(host, "AnalyzeWikipedia")
 
@@ -38,9 +41,12 @@ object AnalyzeWikipedia extends Logging {
 
     val xmlRDD = sc.newAPIHadoopFile(fname, classOf[XmlInputFormat], classOf[LongWritable], classOf[Text], conf)
       .map(stringify)
-      .repartition(numparts)
+
+    println(xmlRDD.count)
+      // .repartition(numparts)
 
     val wikiRDD = xmlRDD.map { raw => new WikiArticle(raw) }
+      .filter { art => art.relevant }
 
     println(wikiRDD.count)
 
@@ -50,10 +56,18 @@ object AnalyzeWikipedia extends Logging {
     println(edges.count)
 
     val g = Graph(vertices, edges)
+    try {
+      val pr = Analytics.pagerank(g, 10)
     // val ct = g.triplets.count
     // println(ct)
-
-    sc.stop()
+    } catch {
+      case ex => {
+        ex.printStackTrace()
+      }
+      
+    } finally {
+      sc.stop()
+    }
   }
 
 

@@ -18,9 +18,15 @@ class WikiArticle(wtext: String) extends Serializable {
   @transient lazy val redirect: Boolean = !WikiArticle.redirectPattern.findFirstIn(wtext).isEmpty
   @transient lazy val stub: Boolean = !WikiArticle.stubPattern.findFirstIn(wtext).isEmpty
   @transient lazy val disambig: Boolean = !WikiArticle.disambigPattern.findFirstIn(wtext).isEmpty
-  val relevant: Boolean = !(redirect || stub || disambig)
   @transient lazy val tiXML = WikiArticle.titlePattern.findFirstIn(wtext).getOrElse("")
-  val title: String = XML.loadString(tiXML).text
+  val title: String = {
+    try {
+      XML.loadString(tiXML).text
+    } catch {
+      case e => "" // don't use null because we get null pointer exceptions
+    }
+  }
+  val relevant: Boolean = !(redirect || stub || disambig || title == null)
   val vertexID: Vid = WikiArticle.titleHash(title)
   val edges: HashSet[Edge[Double]] = {
     val temp = neighbors.map { n => Edge(vertexID, n, 1.0) }
