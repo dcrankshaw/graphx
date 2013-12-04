@@ -349,52 +349,141 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
     // RDD[(Vid, Seq[EdgeTriplet[VD,ED]])]
     // this contracts every connected component into a single (Vid, VD)
+    // val groupedVertices: RDD[(Vid, Seq[EdgeTriplet[(Vid,VD),ED]])]  = triplets.groupBy((t => t.srcAttr._1))
+    // val contractedVertices: RDD[(Vid, VD)] = groupedVertices.map { case (ccID, verts) => {
+    //     val reducedVertex: VD = verts.map(contractTriplet).reduce(mergeF)
+    //     (ccID, reducedVertex)
+    //   }
+    // }
+
+
     val groupedVertices: RDD[(Vid, Seq[EdgeTriplet[(Vid,VD),ED]])]  = triplets.groupBy((t => t.srcAttr._1))
-    val contractedVertices: RDD[(Vid, VD)] = groupedVertices.map { case (ccID, verts) => {
-        val reducedVertex: VD = verts.map(contractTriplet).reduce(mergeF)
-        (ccID, reducedVertex)
+    // val contractedVertices: RDD[(Vid, VD)] = groupedVertices.map { case (ccID, triples) => {
+    // oldVid -> newVid, newData
+    val vertexToContractedVertexMap: RDD[(Vid,(Vid,VD))] = groupedVertices.map { case (ccID, triples) => {
+        // Find the new vertex attribute for the contracted vertex
+        val contractedVertexData: VD = triples.map(contractTriplet).reduce(mergeF)
+        // get all vertex IDs in this component
+        val allVertexIds = new OpenHashSet[Vid](triples.length + 1) // we should never need to resize
+        triples.map { et => {
+          allVertexIds.add(et.srcId)
+          allVertexIds.add(et.dstId)
+          }
+        }
+        // for (et <- triples) {
+        //   allVertexIds.add(et.srcId)
+        //   allVertexIds.add(et.dstId)
+        // }
+
+        // associate the contracted vertex ID and data with each old vertex ID
+        val oldNewVertexMap = new List[(Vid,(Vid,VD))]
+        for (v <- allVertexIds)  {
+          oldNewVertexMap.prepend((v, (ccID, contractedVertexData)))
+        }
+
+        oldNewVertexMap
       }
     }
 
+    // updatedVertexSet should now have the same partitioner and index as the original VertexSetRDD
+    // so we cna do a zipjoin
 
-    //---------------------------------------------------------------------------------
+    val oldVertices = uncontractedEdges.vertices
 
-    // Join this with contracted vertex data so I have a map of
-    // uncontractedVid -> (contractedVid, contractedVD)
-    val vertexToContractedVertexMap: RDD[(Vid,(Vid,VD))] = ccGraph.vertices.join
+    // the vertices that were part of being contracted and thus have new vertex IDs
+    val updatedVertices: VertexSetRDD[(Vid, VD)] = VertexSetRDD(vertexToContractedVertexMap,
+      oldVertices.index)
 
-    // Then (outer? left?)join vertexToContractedVertexMap to uncontractedEdges, substituting
-    // ccID for Vid - this step might require a subgraph step or something? TBD
+    // left join because it is okay if updatedVertices has Vids that newVertices don't have. Those
+    // vertices have no uncontracted edges and so got completely subsumed.
+    // TODO not quite right because this still holds on to the old Vids, need to make new RDD
+    val newVertices: VertexSetRDD[(Vid, VD)] = oldVertices.leftZipJoin(updatedVertices)({
+      (id: Vid, oldData: VD, newData: Option[(Vid, VD)]) => newData.getOrElse((id, oldData))
+    })
 
+
+    // strip out VD, don't need it to modify edges
+    val updatedVertexIDs: VertexSetRDD[Vid] = updatedVertices.map {
+      case (newId, _) => newId
+    }
+
+
+
+    // TODO I think I'm abusing index here. I don't think this will quite work. I probably
+    // need to repartition then use ZipPartitions
+    def updateETable(
+      updatedVertexIDs: VertexSetRDD[Vid],
+      edgesToUpdate: RDD[Edge[ED]]): RDD[(Pid, Array[VD])] = {
+
+        // val edgeIDToDataMap: RDD[(Long,ED)] = edgesToUpdate.map {
+        //   e => ((e.srcId,
+        // }
+
+        val index: VertexSetIndex = updatedVertexIDs.index
+
+        val srcRDD: VertexSetRDD[(Vid, Vid))] = VertexSetRDD(edgesToUpdate.map { e => (e.srcId, (e.srcId, e.dstId)) }, index)
+        val dstRDD: VertexSetRDD[(Vid, Vid))] = VertexSetRDD(edgesToUpdate.map { e => (e. dstId, (e.srcId, e.dstId)) }, index)
+        val dataRDD: RDD[((Vid, Vid), ED)] = edgesToUpdate.map { e => ((e.srcId, e.dstId), e.attr) }
+
+        // once again we can do leftZipJoins because it's okay if there are unmatched entries in updatedVertexIDs
+        // if there 
+        val newSrcVids = srcRDD.leftZipJoin(updatedVertexIDs)({
+          (oldId: Vid, srcAndDst: (Vid, Vid), newID: Option[Vid]) => (newID.getOrElse(oldId), srcAndDst)
+        })
+        // TODO repeat for dst, then rejoin with data
+
+    }
+
+
+
+    val newEdges: RDD[Edge[ED]] = updateETable(updatedVertexIDs, uncontractedEdges)
+
+
+
+
+    // Now I need to figure out how to replicate the correct parts of the oldVid->newVid map
+    // to the edge partitions, then update the edges
 
 
   }
 
 
+
+
+// 
+  // protected def createVTableReplicated[VD: ClassManifest](
+  //     vTable: VertexSetRDD[VD],
+  //     vid2pid: VertexSetRDD[Array[Pid]],
+  //     replicationMap: RDD[(Pid, VertexIdToIndexMap)]):
+  //   RDD[(Pid, Array[VD])] = {
+  //   // Join vid2pid and vTable, generate a shuffle dependency on the joined
+  //   // result, and get the shuffle id so we can use it on the slave.
+  //   val msgsByPartition = vTable.zipJoinFlatMap(vid2pid) { (vid, vdata, pids) =>
+  //     // TODO(rxin): reuse VertexBroadcastMessage
+  //     pids.iterator.map { pid =>
+  //       new VertexBroadcastMsg[VD](pid, vid, vdata)
+  //     }
+  //   }.partitionBy(replicationMap.partitioner.get).cache()
+
+  //   replicationMap.zipPartitions(msgsByPartition){
+  //     (mapIter, msgsIter) =>
+  //     val (pid, vidToIndex) = mapIter.next()
+  //     assert(!mapIter.hasNext)
+  //     // Populate the vertex array using the vidToIndex map
+  //     val vertexArray = new Array[VD](vidToIndex.capacity)
+  //     for (msg <- msgsIter) {
+  //       val ind = vidToIndex.getPos(msg.vid) & OpenHashSet.POSITION_MASK
+  //       vertexArray(ind) = msg.data
+  //     }
+  //     Iterator((pid, vertexArray))
+  //   }.cache()
+
+  //   // @todo assert edge table has partitioner
+  // }
+
+
+
 } // end of GraphOps
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
