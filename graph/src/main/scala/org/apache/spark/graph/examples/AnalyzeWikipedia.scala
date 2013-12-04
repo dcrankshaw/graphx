@@ -8,6 +8,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.conf.Configuration
 import org.apache.mahout.text.wikipedia._
 import org.apache.spark.rdd.RDD
+import java.util.Calendar
 
 
 object AnalyzeWikipedia extends Logging {
@@ -42,22 +43,27 @@ object AnalyzeWikipedia extends Logging {
     val xmlRDD = sc.newAPIHadoopFile(fname, classOf[XmlInputFormat], classOf[LongWritable], classOf[Text], conf)
       .map(stringify)
 
-    println(xmlRDD.count)
+    println("XML pages: " + xmlRDD.count)
       // .repartition(numparts)
 
     val wikiRDD = xmlRDD.map { raw => new WikiArticle(raw) }
       .filter { art => art.relevant }
 
-    println(wikiRDD.count)
+    println("Relevant pages: " + wikiRDD.count)
 
     val vertices = wikiRDD.map { art => (art.vertexID, art.title) }
 
     val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
-    println(edges.count)
+    println("Edges: " + edges.count)
+    println("Creating graph: " + Calendar.getInstance().getTime())
 
     val g = Graph(vertices, edges)
+    g.triplets.count
     try {
+      println("starting pagerank" + Calendar.getInstance().getTime())
+      val startTime = System.currentTimeMillis
       val pr = Analytics.pagerank(g, 10)
+      println("Pagerank runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
     // val ct = g.triplets.count
     // println(ct)
     } catch {
