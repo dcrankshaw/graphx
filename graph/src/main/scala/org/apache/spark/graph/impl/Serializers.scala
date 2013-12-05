@@ -13,14 +13,15 @@ class VidMsgSerializer extends Serializer {
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
         val msg = t.asInstanceOf[(Vid, _)]
-        writeVarLong(msg._1, optimizePositive = false)
+        // writeVarLong(msg._1, optimizePositive = false)
+        writeLong(msg._1)
         this
       }
     }
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       override def readObject[T](): T = {
-        (readVarLong(optimizePositive = false), null).asInstanceOf[T]
+        (readLong(), null).asInstanceOf[T]
       }
     }
   }
@@ -125,7 +126,8 @@ class LongAggMsgSerializer extends Serializer {
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
         val msg = t.asInstanceOf[(Vid, Long)]
-        writeVarLong(msg._1, optimizePositive = false)
+        // writeVarLong(msg._1, optimizePositive = false)
+        writeLong(msg._1)
         writeVarLong(msg._2, optimizePositive = true)
         this
       }
@@ -133,7 +135,7 @@ class LongAggMsgSerializer extends Serializer {
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       override def readObject[T](): T = {
-        val a = readVarLong(optimizePositive = false)
+        val a = readLong()
         val b = readVarLong(optimizePositive = true)
         (a, b).asInstanceOf[T]
       }
@@ -264,6 +266,7 @@ sealed abstract class ShuffleSerializationStream(s: OutputStream) extends Serial
   }
 
   def writeLong(v: Long) {
+    println("write Long")
     s.write((v >>> 56).toInt)
     s.write((v >>> 48).toInt)
     s.write((v >>> 40).toInt)

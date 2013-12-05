@@ -9,7 +9,8 @@ import scala.xml._
 import org.apache.spark.serializer.KryoRegistrator
 // import org.apache.spark.util.collection.OpenHashSet
 import scala.collection.immutable.HashSet
-
+import java.security.MessageDigest
+import java.nio.ByteBuffer
 
 
 class WikiArticle(wtext: String) extends Serializable {
@@ -73,12 +74,24 @@ object WikiArticle {
   private def titleHash(title: String): Vid = { math.abs(WikiArticle.myHashcode(canonicalize(title))) }
 
   private def myHashcode(s: String): Long = {
-    var h: Long = 1125899906842597L  // prime
-    val len: Int = s.length
-    for (i<- 0 until len) {
-      h = 31*h + s.charAt(i)
-    }
-    h
+    // var h: Long = 1125899906842597L  // prime
+    // var h: Long = 4294967291L // prime
+  //   var h = 29
+  //   val len: Int = s.length
+  //   for (i<- 0 until len) {
+  //     h = 31*h + s.charAt(i)
+  //   }
+  //   h
+  //   // s.hashCode()
+  // }
+
+    val md: MessageDigest = MessageDigest.getInstance("MD5")
+    md.update(s.getBytes)
+    val result: Array[Byte] = md.digest()
+    val longResult = ByteBuffer.wrap(result).getLong
+    // shift result by 2
+    val retval = longResult >> 10
+    retval
   }
 
 }
