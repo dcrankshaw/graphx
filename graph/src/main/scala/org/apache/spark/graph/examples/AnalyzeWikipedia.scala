@@ -55,6 +55,11 @@ object AnalyzeWikipedia extends Logging {
     println("Relevant pages: " + wikiRDD.count)
 
     val vertices: RDD[(Vid, String)] = wikiRDD.map { art => (art.vertexID, art.title) }
+    val justVids = wikiRDD.map { art => art.vertexID }
+    println("taking top vids")
+    val topvids = justVids.top(10)
+    sc.stop()
+    System.exit(0)
 
     // val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
     val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
@@ -64,8 +69,8 @@ object AnalyzeWikipedia extends Logging {
 
     // println(allEdges.deep.mkString("\n"))
 
-    // val g = Graph(vertices, edges)
-    val g = Graph.fromEdges(edges, 1)
+    val g = Graph(vertices, edges)
+    // val g = Graph.fromEdges(edges, 1)
     // val g = Graph(edges, 1)
     println("Triplets: " + g.triplets.count)
 
@@ -82,14 +87,20 @@ object AnalyzeWikipedia extends Logging {
       println("starting pagerank " + Calendar.getInstance().getTime())
       val startTime = System.currentTimeMillis
       val pr = PageRank.run(g, 10)
+      val myOrdering = Ordering.by[(Vid, Double), Double]((entry: (Vid, Double)) => entry._2)
+      // val top10PR = pr.vertices.top(10)(Ordering[Double].on((entry: (Vid, Double)) => entry._2))
+      val top10PR = pr.vertices.top(10)(myOrdering)
 
       println("PR numvertices: " + pr.vertices.count + "\tOriginal numVertices " + g.vertices.count)
       println("Pagerank runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
-      // val prAndTitle = g.outerJoinVertices(pr.vertices)({(id: Vid, title: String, rank: Option[Double]) => (title, rank.getOrElse(0.0))})
-      // val topArticles = prAndTitle.vertices.top(30)(Ordering.by[(Vid, (String, Double)), Double](_._2._2))
-      // for(v <- topArticles) {
-      //   println(v)
-      // }
+      val prAndTitle = g.outerJoinVertices(pr.vertices)({(id: Vid, title: String, rank: Option[Double]) => (title, rank.getOrElse(0.0))})
+      println("finished join.")
+      // implicit val ord = implicitly[Ordering[
+
+      val topArticles = prAndTitle.vertices.top(30)(Ordering.by((entry: (Vid, (String, Double))) => entry._2._2))
+      for(v <- topArticles) {
+        println(v)
+      }
 
     // val ct = g.triplets.count
     // println(ct)
