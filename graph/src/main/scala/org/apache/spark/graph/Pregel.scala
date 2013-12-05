@@ -103,7 +103,6 @@ object Pregel {
     while (i < numIter) {
       // compute the messages
       val messages = g.mapReduceTriplets(sendMsg, mergeMsg)
-      println("Messages index: " + messages.index + "\t graph index: " + g.vertices.index)
       // receive the messages
       g = g.joinVertices(messages)(vprog).cache
       g.vertices.count
