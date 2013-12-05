@@ -40,8 +40,7 @@ object GraphLoader {
         Edge(source, target, edata)
       })
     val defaultVertexAttr = 1
-    println("Using " + partitionStrategy.getClass.getName + " as partitioner.")
-    Graph(edges, defaultVertexAttr, partitionStrategy)
+    Graph.fromEdges(edges, defaultVertexAttr, partitionStrategy)
   }
 
   /**
@@ -95,8 +94,7 @@ object GraphLoader {
         }
       })
     val defaultVertexAttr = 1
-    // println("Using " + partitionStrategy.getClass.getName + " as partitioner.")
-    Graph(edges, defaultVertexAttr, partitionStrategy)
+    Graph.fromEdges(edges, defaultVertexAttr, partitionStrategy)
   } // end of edgeListFile
 
 }

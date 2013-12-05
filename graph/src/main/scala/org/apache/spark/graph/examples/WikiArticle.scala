@@ -28,16 +28,16 @@ class WikiArticle(wtext: String) extends Serializable {
   }
   val relevant: Boolean = !(redirect || stub || disambig || title == null)
   val vertexID: Vid = WikiArticle.titleHash(title)
-  // val edges: HashSet[Edge[Double]] = {
-  //   val temp = neighbors.map { n => Edge(vertexID, n, 1.0) }
-  //   val set = new HashSet[Edge[Double]]() ++ temp
-  //   set
-  // }
-  val edges: HashSet[(Vid, Vid)] = {
-    val temp = neighbors.map { n => (vertexID, n) }
-    val set = new HashSet[(Vid, Vid)]() ++ temp
+  val edges: HashSet[Edge[Double]] = {
+    val temp = neighbors.map { n => Edge(vertexID, n, 1.0) }
+    val set = new HashSet[Edge[Double]]() ++ temp
     set
   }
+  // val edges: HashSet[(Vid, Vid)] = {
+  //   val temp = neighbors.map { n => (vertexID, n) }
+  //   val set = new HashSet[(Vid, Vid)]() ++ temp
+  //   set
+  // }
 }
 
 object WikiArticle {

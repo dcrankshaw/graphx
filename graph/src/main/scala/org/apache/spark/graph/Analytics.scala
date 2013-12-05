@@ -49,8 +49,6 @@ object Analytics extends Logging {
        }
     }
 
-     org.apache.log4j.Logger.getRootLogger.setLevel(org.apache.log4j.Level.WARN)
-
      val serializer = "org.apache.spark.serializer.KryoSerializer"
      System.setProperty("spark.serializer", serializer)
      //System.setProperty("spark.shuffle.compress", "false")
@@ -161,7 +159,6 @@ object Analytics extends Logging {
          options.foreach{
            case ("numEPart", v) => numEPart = v.toInt
            case ("numVPart", v) => numVPart = v.toInt
-           case ("dynamic", v) => true
            case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
          }
@@ -171,12 +168,10 @@ object Analytics extends Logging {
          val sc = new SparkContext(host, "TriangleCount(" + fname + ")")
          val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
            minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
-         val startTime = System.currentTimeMillis
-         val triangles = Analytics.triangleCount(graph)
+         val triangles = TriangleCount.run(graph)
          println("Triangles: " + triangles.vertices.map {
             case (vid,data) => data.toLong
           }.reduce(_+_) / 3)
-         logWarning("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
          sc.stop()
        }
 
