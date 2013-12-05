@@ -53,7 +53,6 @@ object WikiArticle {
     val matcher: Matcher = linkPattern.matcher(wt)
     while (matcher.find()) {
       val temp: Array[String] = matcher.group(1).split("\\|")
-      // println(temp.deep.mkString("\n"))
       if (temp != null && temp.length > 0) {
         val link: String = temp(0)
         if (link.contains(":") == false) {

@@ -105,8 +105,7 @@ object Analytics extends Logging {
            pr.vertices.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
          }
          println("GRAPHX: Runtime: " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
-
-         Thread.sleep(100000)
+         val top10PR = pr.vertices.top(10)(Ordering[Double].on((entry: (Vid, Double)) => entry._2))
 
          sc.stop()
        }
