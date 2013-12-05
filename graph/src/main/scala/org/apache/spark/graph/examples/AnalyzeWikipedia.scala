@@ -60,11 +60,12 @@ object AnalyzeWikipedia extends Logging {
     val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
     println("Edges: " + edges.count)
     println("Creating graph: " + Calendar.getInstance().getTime())
-    val allEdges = edges.collect
+    // val allEdges = edges.collect
 
     // println(allEdges.deep.mkString("\n"))
 
-    val g = Graph(vertices, edges)
+    // val g = Graph(vertices, edges)
+    val g = Graph.fromEdges(edges, 1)
     // val g = Graph(edges, 1)
     println("Triplets: " + g.triplets.count)
 
