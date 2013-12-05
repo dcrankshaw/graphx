@@ -100,7 +100,6 @@ object Pregel extends Logging {
     var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
 
     var i = 0
-    println("About to enter Pregel loop.")
     while (i < numIter) {
       // compute the messages
       val messages = g.mapReduceTriplets(sendMsg, mergeMsg) // broadcast & aggregation
