@@ -2,6 +2,7 @@ package org.apache.spark.graph.examples
 
 import org.apache.spark._
 import org.apache.spark.graph._
+import org.apache.spark.graph.algorithms._
 import org.apache.spark.rdd.NewHadoopRDD
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
@@ -53,18 +54,18 @@ object AnalyzeWikipedia extends Logging {
 
     println("Relevant pages: " + wikiRDD.count)
 
-    val vertices = wikiRDD.map { art => (art.vertexID, art.title) }
+    val vertices: RDD[(Vid, String)] = wikiRDD.map { art => (art.vertexID, art.title) }
 
     // val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
-    val edges: RDD[(Vid, Vid)] = wikiRDD.flatMap { art => art.edges }
+    val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
     println("Edges: " + edges.count)
     println("Creating graph: " + Calendar.getInstance().getTime())
     val allEdges = edges.collect
 
-    println(allEdges.deep.mkString("\n"))
+    // println(allEdges.deep.mkString("\n"))
 
-    // val g = Graph(vertices, edges).cache()
-    val g = Graph(edges, 1)
+    val g = Graph(vertices, edges)
+    // val g = Graph(edges, 1)
     println("Triplets: " + g.triplets.count)
 
     // val g2 = GraphLoader.edgeListFile(sc, preformattedFname, partitionStrategy=RandomVertexCut()).cache()
@@ -75,11 +76,11 @@ object AnalyzeWikipedia extends Logging {
     try {
 
       println("starting connected components " + Calendar.getInstance().getTime())
-      val ccGraph = Analytics.connectedComponents(g)
+      val ccGraph = ConnectedComponents.run(g)
       println("CCGraph Vertices " + ccGraph.triplets.count)
       println("starting pagerank " + Calendar.getInstance().getTime())
       val startTime = System.currentTimeMillis
-      val pr = Analytics.pagerank(g, 10)
+      val pr = PageRank.run(g, 10)
 
       println("PR numvertices: " + pr.vertices.count + "\tOriginal numVertices " + g.vertices.count)
       println("Pagerank runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
