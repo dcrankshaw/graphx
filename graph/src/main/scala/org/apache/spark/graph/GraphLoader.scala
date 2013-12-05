@@ -95,7 +95,7 @@ object GraphLoader {
         }
       })
     val defaultVertexAttr = 1
-    println("Using " + partitionStrategy.getClass.getName + " as partitioner.")
+    // println("Using " + partitionStrategy.getClass.getName + " as partitioner.")
     Graph(edges, defaultVertexAttr, partitionStrategy)
   } // end of edgeListFile
 
