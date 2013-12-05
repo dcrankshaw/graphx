@@ -28,9 +28,14 @@ class WikiArticle(wtext: String) extends Serializable {
   }
   val relevant: Boolean = !(redirect || stub || disambig || title == null)
   val vertexID: Vid = WikiArticle.titleHash(title)
-  val edges: HashSet[Edge[Double]] = {
-    val temp = neighbors.map { n => Edge(vertexID, n, 1.0) }
-    val set = new HashSet[Edge[Double]]() ++ temp
+  // val edges: HashSet[Edge[Double]] = {
+  //   val temp = neighbors.map { n => Edge(vertexID, n, 1.0) }
+  //   val set = new HashSet[Edge[Double]]() ++ temp
+  //   set
+  // }
+  val edges: HashSet[(Vid, Vid)] = {
+    val temp = neighbors.map { n => (vertexID, n) }
+    val set = new HashSet[(Vid, Vid)]() ++ temp
     set
   }
 }
@@ -64,7 +69,17 @@ object WikiArticle {
   }
 
   // Hash of the canonical article name. Used for vertex ID.
-  private def titleHash(title: String): Vid = { math.abs(canonicalize(title).hashCode) }
+  // TODO this should be a 64bit hash
+  private def titleHash(title: String): Vid = { math.abs(WikiArticle.myHashcode(canonicalize(title))) }
+
+  private def myHashcode(s: String): Long = {
+    var h: Long = 1125899906842597L  // prime
+    val len: Int = s.length
+    for (i<- 0 until len) {
+      h = 31*h + s.charAt(i)
+    }
+    h
+  }
 
 }
 

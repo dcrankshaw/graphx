@@ -99,14 +99,19 @@ object Pregel {
     var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg)).cache
 
     var i = 0
+    println("About to enter Pregel loop.")
     while (i < numIter) {
       // compute the messages
       val messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+      println("Messages index: " + messages.index + "\t graph index: " + g.vertices.index)
       // receive the messages
       g = g.joinVertices(messages)(vprog).cache
+      g.vertices.count
+      println("Finished Pregel iteration: " + i)
       // count the iteration
       i += 1
     }
+    println("Finished Pregel.")
     // Return the final graph
     g
   } // end of apply

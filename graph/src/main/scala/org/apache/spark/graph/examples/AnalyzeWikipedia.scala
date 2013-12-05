@@ -9,6 +9,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.mahout.text.wikipedia._
 import org.apache.spark.rdd.RDD
 import java.util.Calendar
+import scala.math.Ordering.Implicits._
 
 
 object AnalyzeWikipedia extends Logging {
@@ -20,13 +21,14 @@ object AnalyzeWikipedia extends Logging {
 
     val host = args(0)
     val fname = args(1)
-    val numparts = {
-      if (args.length >= 3) {
-        args(2).toInt
-      } else {
-        64
-      }
-    }
+    // val numparts = {
+    //   if (args.length >= 3) {
+    //     args(2).toInt
+    //   } else {
+    //     64
+    //   }
+    // }
+    // val preformattedFname = args(2)
 
    val serializer = "org.apache.spark.serializer.KryoSerializer"
    System.setProperty("spark.serializer", serializer)
@@ -53,17 +55,40 @@ object AnalyzeWikipedia extends Logging {
 
     val vertices = wikiRDD.map { art => (art.vertexID, art.title) }
 
-    val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
+    // val edges: RDD[Edge[Double]] = wikiRDD.flatMap { art => art.edges }
+    val edges: RDD[(Vid, Vid)] = wikiRDD.flatMap { art => art.edges }
     println("Edges: " + edges.count)
     println("Creating graph: " + Calendar.getInstance().getTime())
+    val allEdges = edges.collect
 
-    val g = Graph(vertices, edges)
-    g.triplets.count
+    println(allEdges.deep.mkString("\n"))
+
+    // val g = Graph(vertices, edges).cache()
+    val g = Graph(edges, 1)
+    println("Triplets: " + g.triplets.count)
+
+    // val g2 = GraphLoader.edgeListFile(sc, preformattedFname, partitionStrategy=RandomVertexCut()).cache()
+    // println("Pagerank on livejournal: " + g2.triplets.count)
+    // val g2PR = Analytics.pagerank(g2, 5)
+    // println("g2PR.count: " + g2PR.triplets.count)
+
     try {
-      println("starting pagerank" + Calendar.getInstance().getTime())
+
+      println("starting connected components " + Calendar.getInstance().getTime())
+      val ccGraph = Analytics.connectedComponents(g)
+      println("CCGraph Vertices " + ccGraph.triplets.count)
+      println("starting pagerank " + Calendar.getInstance().getTime())
       val startTime = System.currentTimeMillis
       val pr = Analytics.pagerank(g, 10)
+
+      println("PR numvertices: " + pr.vertices.count + "\tOriginal numVertices " + g.vertices.count)
       println("Pagerank runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
+      // val prAndTitle = g.outerJoinVertices(pr.vertices)({(id: Vid, title: String, rank: Option[Double]) => (title, rank.getOrElse(0.0))})
+      // val topArticles = prAndTitle.vertices.top(30)(Ordering.by[(Vid, (String, Double)), Double](_._2._2))
+      // for(v <- topArticles) {
+      //   println(v)
+      // }
+
     // val ct = g.triplets.count
     // println(ct)
     } catch {
