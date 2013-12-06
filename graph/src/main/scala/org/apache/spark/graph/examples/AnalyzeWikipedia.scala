@@ -36,6 +36,7 @@ object AnalyzeWikipedia extends Logging {
    System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
 
     val sc = new SparkContext(host, "AnalyzeWikipedia")
+    val top10 = sc.parallelize(1 to 1000, 10).map(x => (x.toString, x)).top(10)(Ordering.by(_._2))
 
 
     val conf = new Configuration
