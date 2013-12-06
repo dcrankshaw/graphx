@@ -25,6 +25,7 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[BoundedPriorityQueue[Object]])
     kryo.register(classOf[WikiArticle])
     kryo.register(classOf[HashSet[Edge[Double]]])
+    kryo.register(classOf[BoundedPriorityQueue[Object]])
 
     // This avoids a large number of hash table lookups.
     kryo.setReferences(false)
