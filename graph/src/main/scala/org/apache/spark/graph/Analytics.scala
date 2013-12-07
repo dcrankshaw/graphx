@@ -107,8 +107,6 @@ object Analytics extends Logging {
          }
          println("GRAPHX: Runtime: " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
 
-         Thread.sleep(100000)
-
          sc.stop()
        }
 
