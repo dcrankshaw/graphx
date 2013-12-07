@@ -273,7 +273,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
 
 
-      val vertices = sc.parallelize((0 to 10).map(x => (x.toLong, 1)))
+      val vertices = sc.parallelize((1 to 10).map(x => (x.toLong, 1)))
       val rawEdges = Seq(Edge(1,2,1),Edge(2,3,1),Edge(3,1,1),Edge(2,4,0),Edge(4,3,0),
                                     Edge(5,4,0),Edge(4,6,0),Edge(6,7,0),Edge(8,3,0),Edge(8,7,0),
                                     Edge(10,1,0),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
@@ -285,7 +285,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // g1.edges.count
       // println(g1.flatMap { case (ccID, triples) => triples.toList }.count)
       // println(g1.edges.count)
-      println(g1.triplets.count)
+      g1.triplets.collect.map( t => println(t))
 
 
       //val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)

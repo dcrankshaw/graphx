@@ -342,8 +342,12 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
     // subgraph gets re-indexed so worrying about indices might not be a huge deal
     val edgesToContract = graph.subgraph(epred)
+    // println("Edges to contract:")
+    // edgesToContract.edges.collect.map(e => println(e))
     // this should return the disjoint set of edges in set B
     val uncontractedEdges = graph.subgraph( {case(et) =>  !epred(et)})
+    println("\nUntouched edges:")
+    uncontractedEdges.edges.collect.map(e => println(e))
 
     // Connected components graph has Vid as vertex data
     val ccGraph: Graph[Vid,ED] = ConnectedComponents.run(edgesToContract)
@@ -400,7 +404,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
         oldNewVertexMap
       }
     }
-    vertexToContractedVertexMap.count
 
     // ClosureCleaner.clean(epred)
     // ClosureCleaner.clean(contractF)
@@ -426,7 +429,9 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
     // the vertices that were part of being contracted and thus have new vertex IDs
     val updatedVertices: VertexRDD[(Vid, VD)] = VertexRDD(vertexToContractedVertexMap)
-    updatedVertices.count
+    // updatedVertices.count
+    // println("\nUpdated Vertices:")
+    // updatedVertices.collect.map(a => println(a))
 
     // left join because it is okay if updatedVertices has Vids that newVertices don't have. Those
     // vertices have no uncontracted edges and so got completely subsumed.
@@ -435,49 +440,71 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       })
       // This last map will hopefully get rid of the old vids
       .map { case (_: Vid, (newID: Vid, newData: VD)) => (newID, newData)})
-    newVertices.count
+    // newVertices.count
+    // println("\nNew Vertices:")
+    // newVertices.collect.map(a => println(a))
 
     // strip out VD, don't need it to modify edges
-    val updatedVertexIDs: VertexRDD[Vid] = updatedVertices.mapValues { data: (Vid, VD) => data._1 }
+    // val updatedVertexIDs: VertexRDD[Vid] = updatedVertices.mapValues { data: (Vid, VD) => data._1 }
+    val updatedVertexIDs: RDD[(Vid, Vid)] = updatedVertices.map { case (id: Vid, (newID: Vid, _: VD)) => (id, newID) }
 
     def updateETable(
-      updatedVertexIDs: VertexRDD[Vid],
+      updatedVertexIDs: RDD[(Vid, Vid)],
       edgesToUpdate: RDD[Edge[ED]]): RDD[Edge[ED]] = {
 
-      val srcRDD: VertexRDD[(Vid,Vid)] = VertexRDD(edgesToUpdate.map { e => (e.srcId, (e.srcId, e.dstId)) })
+      val srcRDD: RDD[(Vid,(Vid,Vid))] = edgesToUpdate.map { e => (e.srcId, (e.srcId, e.dstId)) }
       srcRDD.count
-      println("aaa")
-      val dstRDD: VertexRDD[(Vid,Vid)] = VertexRDD(edgesToUpdate.map { e => (e.dstId, (e.srcId, e.dstId)) })
+      println("srcRDD")
+      srcRDD.collect.map(e => println(e))
+      val dstRDD: RDD[(Vid,(Vid,Vid))] = edgesToUpdate.map { e => (e.dstId, (e.srcId, e.dstId)) }
       dstRDD.count
-      println("bbb")
+      println("dstRDD")
+      dstRDD.collect.map(e => println(e))
       val dataRDD: RDD[((Vid, Vid), ED)] = edgesToUpdate.map { e => ((e.srcId, e.dstId), e.attr) }
       dataRDD.count
-      println("ccc")
+      println("dataRDD")
+      dataRDD.collect.map(e=> println(e))
+      println("done")
 
       // once again we can do leftZipJoins because it's okay if there are unmatched entries in updatedVertexIDs
       // if there 
       // val newSrcVidsTemp = srcRDD.leftZipJoin(updatedVertexIDs)({
-      val newSrcVids: RDD[((Vid,Vid), Vid)]= srcRDD.leftJoin(updatedVertexIDs)({
-        (oldId: Vid, srcAndDst: (Vid, Vid), newID: Option[Vid]) => (newID.getOrElse(oldId), srcAndDst)
-      }).map { case (_: Vid, (newID: Vid, srcAndDst: (Vid,Vid))) => (srcAndDst, newID)}
-      newSrcVids.count
-      println("eee")
+      // Need to do an RDD join rather than a VertexRDD join because might have multiple edges keyed on the same
+      // Vid and VertexRDD will drop one
 
-      val newDstVids: RDD[((Vid,Vid),Vid)] = dstRDD.leftZipJoin(updatedVertexIDs)({
-        (oldId: Vid, srcAndDst: (Vid, Vid), newID: Option[Vid]) => (newID.getOrElse(oldId), srcAndDst)
-      }).map { case (_: Vid, (newID: Vid, srcAndDst: (Vid,Vid))) => (srcAndDst, newID)}
+      // val newSrcVidsTemp: RDD[(Vid, ((Vid,Vid), Option[Vid]))] = srcRDD.leftOuterJoin(updatedVertexIDs)
+      // val newSrcVids: RDD[((Vid, Vid), Vid)] = newSrcVidsTemp
+      //   .map { case(oldId: Vid, (srcAndDst: (Vid, Vid), newId: Option[Vid])) => (srcAndDst, newId.getOrElse(oldId))}
+
+
+
+      val newSrcVids: RDD[((Vid, Vid), Vid)] = srcRDD.leftOuterJoin(updatedVertexIDs)
+        .map { case(oldId: Vid, (srcAndDst: (Vid, Vid), newId: Option[Vid])) => (srcAndDst, newId.getOrElse(oldId))}
+      println("newSrcVids:")
+      newSrcVids.collect.map(a => println(a))
+
+
+      val newDstVids: RDD[((Vid, Vid), Vid)] = dstRDD.leftOuterJoin(updatedVertexIDs)
+        .map { case(oldId: Vid, (srcAndDst: (Vid, Vid), newId: Option[Vid])) => (srcAndDst, newId.getOrElse(oldId))}
+
       
+    //   val newEdges: RDD[Edge[ED]] = newSrcVids.join(newDstVids).join(dataRDD)
+    //     .map { case (_: (Vid,Vid), ((newSrc: Vid, newDst: Vid), data: ED)) => Edge(newSrc, newDst, data)}
+    //   newEdges
+    // }
+
+
       val newEdges: RDD[Edge[ED]] = newSrcVids.join(newDstVids).join(dataRDD)
         .map { case (_: (Vid,Vid), ((newSrc: Vid, newDst: Vid), data: ED)) => Edge(newSrc, newDst, data)}
-
       newEdges
     }
+
 
     val newEdges: RDD[Edge[ED]] = updateETable(updatedVertexIDs, uncontractedEdges.edges)
     newEdges.count
     val filteredEdges = newEdges.filter(e => e.srcId != e.dstId)
 
-    Graph(newVertices, filtereds)
+    Graph(newVertices, filteredEdges)
   }
 
 
