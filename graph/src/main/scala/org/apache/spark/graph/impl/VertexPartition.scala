@@ -145,8 +145,12 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     val newValues = new Array[VD2](capacity)
     iter.foreach { case (vid, vdata) =>
       val pos = index.getPos(vid)
-      newMask.set(pos)
-      newValues(pos) = vdata
+      // This check silently drops values that are not in the index
+      // In general we probably don't want to silently drop them
+      if (pos >= 0) {
+        newMask.set(pos)
+        newValues(pos) = vdata
+      }
     }
     new VertexPartition[VD2](index, newValues, newMask)
   }

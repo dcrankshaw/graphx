@@ -163,6 +163,11 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val g: Graph[Int,Int] = Graph(vertices, edges)
       val g1 = g.contractEdges({ (et: EdgeTriplet[Int,Int]) => (et.attr == 1) },
       { (et: EdgeTriplet[Int,Int]) => et.attr }, { (u: Int, v: Int) => u + v })
+      // g1.edges.collect.map(e => println(e))
+      // g1.edges.count
+      // println(g1.flatMap { case (ccID, triples) => triples.toList }.count)
+      // println(g1.edges.count)
+      println(g1.triplets.count)
 
 
       //val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
