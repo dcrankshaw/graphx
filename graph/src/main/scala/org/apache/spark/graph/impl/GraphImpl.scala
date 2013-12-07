@@ -164,7 +164,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
     // Filter the vertices, reusing the partitioner and the index from
     // this graph
-    val newVTable = vertices.mapVertexPartitions(_.filter(vpred).reindex())
+    // val newVTable = vertices.mapVertexPartitions(_.filter(vpred).reindex())
+    val newVTable = vertices.mapVertexPartitions(_.filter(vpred))
 
     val edManifest = classManifest[ED]
 
