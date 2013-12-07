@@ -3,6 +3,9 @@ package org.apache.spark.graph
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkException
+import org.apache.spark.graph.algorithms.ConnectedComponents
+import org.apache.spark.util.collection.OpenHashSet
+import scala.collection.mutable
 
 
 /**
@@ -343,17 +346,17 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     val uncontractedEdges = graph.subgraph( {case(et) =>  !epred(et)})
 
     // Connected components graph has Vid as vertex data
-    val ccGraph: Graph[Vid,ED] = Analytics.connectedComponents(edgesToContract)
+    val ccGraph: Graph[Vid,ED] = ConnectedComponents.run(edgesToContract)
 
 
 
 
     // join vertex data back with connected component data
-    val ccVerticesWithData: Graph[(Vid,VD), ED] = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
+    val ccVerticesWithData: VertexRDD[(Vid,VD)] = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
     // TODO(dcrankshaw) might be able to make this Graph.apply() more efficient by reusing index
     // Alternatively, Joey's proposed partitioning change (we assume the graph is already partitioned)
     // might address this
-    val ccWithDataGraph = Graph(ccVerticesWithData, edgesToContract.edges)
+    val ccWithDataGraph: Graph[(Vid,VD),ED] = Graph(ccVerticesWithData, edgesToContract.edges)
     // so far all we've done is modify the vertex data
     val ccWithDataTriplets: RDD[EdgeTriplet[(Vid,VD),ED]] = ccWithDataGraph.triplets
 
@@ -393,7 +396,8 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
         val contractedVertexData: VD = triples.map(contractTriplet).reduce(mergeF)
 
         // get all vertex IDs in this component
-        val allVertexIds = new OpenHashSet[Vid](triples.length + 1) // we should never need to resize
+        // val allVertexIds = new OpenHashSet[Vid](triples.length + 1) // we should never need to resize
+        val allVertexIds = new mutable.HashSet[Vid]() // we should never need to resize
         triples.map { et => {
           allVertexIds.add(et.srcId)
           allVertexIds.add(et.dstId)
@@ -418,7 +422,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
     // left join because it is okay if updatedVertices has Vids that newVertices don't have. Those
     // vertices have no uncontracted edges and so got completely subsumed.
-    val newVertices: VertexRDD[VD] = VertexRDD(oldVertices.leftZipJoin(updateVertices)({
+    val newVertices: VertexRDD[VD] = VertexRDD(oldVertices.leftZipJoin(updatedVertices)({
       (id: Vid, oldData: VD, newData: Option[(Vid, VD)]) => newData.getOrElse((id, oldData))
       })
       // This last map will hopefully get rid of the old vids
@@ -427,16 +431,16 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
 
     // strip out VD, don't need it to modify edges
-    val updatedVertexIDs: VertexRDD[Vid] = updatedVertices.map {
-      case (newId, _) => newId
-    }
+    val updatedVertexIDs: VertexRDD[Vid] = updatedVertices.mapValues { data: (Vid, VD) => data._1 }
+    //   case (newId: Vid, _: VD) => newId
+    // })
 
 
 
     // TODO I think I'm abusing index here. I don't think this will quite work. I probably
     // need to repartition then use ZipPartitions
     def updateETable(
-      updatedVertexIDs: VertexSetRDD[Vid],
+      updatedVertexIDs: VertexRDD[Vid],
       edgesToUpdate: RDD[Edge[ED]]): RDD[Edge[ED]] = {
 
       // val edgeIDToDataMap: RDD[(Long,ED)] = edgesToUpdate.map {
@@ -467,7 +471,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
 
 
-    val newEdges: RDD[Edge[ED]] = updateETable(updatedVertexIDs, uncontractedEdges)
+    val newEdges: RDD[Edge[ED]] = updateETable(updatedVertexIDs, uncontractedEdges.edges)
 
     Graph(newVertices, newEdges)
   }
