@@ -349,13 +349,15 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
 
     // join vertex data back with connected component data
-    val ccVerticesWithData = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
+    val ccVerticesWithData: Graph[(Vid,VD), ED] = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
     // TODO(dcrankshaw) might be able to make this Graph.apply() more efficient by reusing index
     // Alternatively, Joey's proposed partitioning change (we assume the graph is already partitioned)
     // might address this
     val ccWithDataGraph = Graph(ccVerticesWithData, edgesToContract.edges)
-    val triplets: RDD[EdgeTriplet[(Vid,VD),ED]] = ccWithDataGraph.triplets
+    // so far all we've done is modify the vertex data
+    val ccWithDataTriplets: RDD[EdgeTriplet[(Vid,VD),ED]] = ccWithDataGraph.triplets
 
+    // This is to workaround the user's contractF taking an EdgeTriplet[VD,ED] not EdgeTriplet[(Vid,VD),ED]
     def contractTriplet(edge: EdgeTriplet[(Vid,VD),ED]): VD = {
       val et = new EdgeTriplet[VD, ED]
       et.srcId = edge.srcId
@@ -382,12 +384,14 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     // }
 
 
-    val groupedVertices: RDD[(Vid, Seq[EdgeTriplet[(Vid,VD),ED]])]  = triplets.groupBy((t => t.srcAttr._1))
+    val groupedVertices: RDD[(Vid, Seq[EdgeTriplet[(Vid,VD),ED]])]  = ccWithDataTriplets.groupBy((t => t.srcAttr._1))
     // val contractedVertices: RDD[(Vid, VD)] = groupedVertices.map { case (ccID, triples) => {
     // oldVid -> newVid, newData
-    val vertexToContractedVertexMap: RDD[(Vid,(Vid,VD))] = groupedVertices.map { case (ccID, triples) => {
+    val vertexToContractedVertexMap: RDD[(Vid,(Vid,VD))] = groupedVertices.flatMap { case (ccID, triples) => {
+
         // Find the new vertex attribute for the contracted vertex
         val contractedVertexData: VD = triples.map(contractTriplet).reduce(mergeF)
+
         // get all vertex IDs in this component
         val allVertexIds = new OpenHashSet[Vid](triples.length + 1) // we should never need to resize
         triples.map { et => {
@@ -395,40 +399,35 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
           allVertexIds.add(et.dstId)
           }
         }
-        // for (et <- triples) {
-        //   allVertexIds.add(et.srcId)
-        //   allVertexIds.add(et.dstId)
-        // }
 
         // associate the contracted vertex ID and data with each old vertex ID
-        val oldNewVertexMap = new List[(Vid,(Vid,VD))]
-        for (v <- allVertexIds)  {
-          oldNewVertexMap.prepend((v, (ccID, contractedVertexData)))
-        }
+        val oldNewVertexMap = allVertexIds.map { v:Vid => (v, (ccID, contractedVertexData)) }
+        // val oldNewVertexMap = new List[(Vid,(Vid,VD))]
+        // for (v <- allVertexIds)  {
+        //   oldNewVertexMap.prepend((v, (ccID, contractedVertexData)))
+        // }
 
         oldNewVertexMap
       }
     }
 
-    // updatedVertexSet should now have the same partitioner and index as the original VertexSetRDD
-    // so we cna do a zipjoin
-
-    val oldVertices = uncontractedEdges.vertices
+    val oldVertices: VertexRDD[VD] = uncontractedEdges.vertices
 
     // the vertices that were part of being contracted and thus have new vertex IDs
-    val updatedVertices: VertexSetRDD[(Vid, VD)] = VertexSetRDD(vertexToContractedVertexMap,
-      oldVertices.index)
+    val updatedVertices: VertexRDD[(Vid, VD)] = VertexRDD(vertexToContractedVertexMap)
 
     // left join because it is okay if updatedVertices has Vids that newVertices don't have. Those
     // vertices have no uncontracted edges and so got completely subsumed.
-    // TODO not quite right because this still holds on to the old Vids, need to make new RDD
-    val newVertices: VertexSetRDD[(Vid, VD)] = oldVertices.leftZipJoin(updatedVertices)({
+    val newVertices: VertexRDD[VD] = VertexRDD(oldVertices.leftZipJoin(updateVertices)({
       (id: Vid, oldData: VD, newData: Option[(Vid, VD)]) => newData.getOrElse((id, oldData))
-    })
+      })
+      // This last map will hopefully get rid of the old vids
+      .map { case (_: Vid, (newID: Vid, newData: VD)) => (newID, newData)})
+
 
 
     // strip out VD, don't need it to modify edges
-    val updatedVertexIDs: VertexSetRDD[Vid] = updatedVertices.map {
+    val updatedVertexIDs: VertexRDD[Vid] = updatedVertices.map {
       case (newId, _) => newId
     }
 
@@ -438,38 +437,39 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     // need to repartition then use ZipPartitions
     def updateETable(
       updatedVertexIDs: VertexSetRDD[Vid],
-      edgesToUpdate: RDD[Edge[ED]]): RDD[(Pid, Array[VD])] = {
+      edgesToUpdate: RDD[Edge[ED]]): RDD[Edge[ED]] = {
 
-        // val edgeIDToDataMap: RDD[(Long,ED)] = edgesToUpdate.map {
-        //   e => ((e.srcId,
-        // }
+      // val edgeIDToDataMap: RDD[(Long,ED)] = edgesToUpdate.map {
+      //   e => ((e.srcId,
+      // }
 
-        val index: VertexSetIndex = updatedVertexIDs.index
+      // val index: VertexSetIndex = updatedVertexIDs.index
 
-        val srcRDD: VertexSetRDD[(Vid, Vid))] = VertexSetRDD(edgesToUpdate.map { e => (e.srcId, (e.srcId, e.dstId)) }, index)
-        val dstRDD: VertexSetRDD[(Vid, Vid))] = VertexSetRDD(edgesToUpdate.map { e => (e. dstId, (e.srcId, e.dstId)) }, index)
-        val dataRDD: RDD[((Vid, Vid), ED)] = edgesToUpdate.map { e => ((e.srcId, e.dstId), e.attr) }
+      val srcRDD: VertexRDD[(Vid,Vid)] = VertexRDD(edgesToUpdate.map { e => (e.srcId, (e.srcId, e.dstId)) })
+      val dstRDD: VertexRDD[(Vid,Vid)] = VertexRDD(edgesToUpdate.map { e => (e.dstId, (e.srcId, e.dstId)) })
+      val dataRDD: RDD[((Vid, Vid), ED)] = edgesToUpdate.map { e => ((e.srcId, e.dstId), e.attr) }
 
-        // once again we can do leftZipJoins because it's okay if there are unmatched entries in updatedVertexIDs
-        // if there 
-        val newSrcVids = srcRDD.leftZipJoin(updatedVertexIDs)({
-          (oldId: Vid, srcAndDst: (Vid, Vid), newID: Option[Vid]) => (newID.getOrElse(oldId), srcAndDst)
-        })
-        // TODO repeat for dst, then rejoin with data
+      // once again we can do leftZipJoins because it's okay if there are unmatched entries in updatedVertexIDs
+      // if there 
+      val newSrcVids: RDD[((Vid,Vid), Vid)] = srcRDD.leftZipJoin(updatedVertexIDs)({
+        (oldId: Vid, srcAndDst: (Vid, Vid), newID: Option[Vid]) => (newID.getOrElse(oldId), srcAndDst)
+      }).map { case (_: Vid, (newID: Vid, srcAndDst: (Vid,Vid))) => (srcAndDst, newID)}
 
+      val newDstVids: RDD[((Vid,Vid),Vid)] = dstRDD.leftZipJoin(updatedVertexIDs)({
+        (oldId: Vid, srcAndDst: (Vid, Vid), newID: Option[Vid]) => (newID.getOrElse(oldId), srcAndDst)
+      }).map { case (_: Vid, (newID: Vid, srcAndDst: (Vid,Vid))) => (srcAndDst, newID)}
+      
+      val newEdges: RDD[Edge[ED]] = newSrcVids.join(newDstVids).join(dataRDD)
+        .map { case (_: (Vid,Vid), ((newSrc: Vid, newDst: Vid), data: ED)) => Edge(newSrc, newDst, data)}
+
+      newEdges
     }
 
 
 
     val newEdges: RDD[Edge[ED]] = updateETable(updatedVertexIDs, uncontractedEdges)
 
-
-
-
-    // Now I need to figure out how to replicate the correct parts of the oldVid->newVid map
-    // to the edge partitions, then update the edges
-
-
+    Graph(newVertices, newEdges)
   }
 
 
