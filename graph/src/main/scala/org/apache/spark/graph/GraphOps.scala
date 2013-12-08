@@ -481,6 +481,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       newEdges
     }
 
+    // filter out self-loops
     val newEdges: RDD[Edge[ED]] = updateETable(updatedVertexIDs, uncontractedEdges.edges)
     // newEdges.count
     val filteredEdges = newEdges.filter(e => e.srcId != e.dstId)

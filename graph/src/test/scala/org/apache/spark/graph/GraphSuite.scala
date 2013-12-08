@@ -228,6 +228,34 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   }
 
 
+  test("triplets") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+
+      val vertices = sc.parallelize((1 to 10).map(x => (x.toLong, 1)))
+      val rawEdges = Seq(Edge(1,2,1),Edge(2,3,1),Edge(3,1,1),Edge(2,4,0),Edge(4,3,0),
+                                    Edge(5,4,12345),Edge(4,6,0),Edge(6,7,7858),Edge(8,3,0),Edge(8,7,0),
+                                    Edge(10,1,23554),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
+      val baselineTriples = Set(rawEdges.map { e =>
+        val et= new EdgeTriplet[Int, Int] 
+        et.srcId = e.srcId
+        et.srcAttr = 1
+        et.dstId = e.dstId
+        et.dstAttr = 1
+        et.attr = e.attr
+        et
+      })
+
+      val edges = sc.parallelize(rawEdges)
+      val g: Graph[Int,Int] = Graph(vertices, edges)
+      
+      val triples = g.triplets.collect.toSet
+      assert(triples.size == baselineTriples.size)
+      assert(triples === baselineTriples)
+      
+    }
+  }
+
+
   test("contractEdges") {
     withSpark(new SparkContext("local", "test")) { sc =>
 
