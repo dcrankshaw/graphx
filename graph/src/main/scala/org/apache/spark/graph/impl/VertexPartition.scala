@@ -191,7 +191,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       if (pos >= 0) {
         newMask.set(pos)
         newValues(pos) = vdata
-      }
+      // }
     }
     new VertexPartition[VD2](index, newValues, newMask)
   }
