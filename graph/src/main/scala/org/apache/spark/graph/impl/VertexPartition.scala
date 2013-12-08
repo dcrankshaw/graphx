@@ -190,10 +190,10 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       val pos = index.getPos(vid)
       // This check silently drops values that are not in the index
       // In general we probably don't want to silently drop them
-      if (pos >= 0) {
+      // if (pos >= 0) {
         newMask.set(pos)
         newValues(pos) = vdata
-      }
+      // }
     }
     new VertexPartition[VD2](index, newValues, newMask, srcEdgePositions)
   }
