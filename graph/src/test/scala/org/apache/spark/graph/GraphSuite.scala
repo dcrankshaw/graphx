@@ -151,23 +151,59 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   }
 
 
+  test("triplets") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+
+      val vertices = sc.parallelize((1 to 10).map(x => (x.toLong, 1)))
+      val rawEdges = Seq(Edge(1,2,1),Edge(2,3,1),Edge(3,1,1),Edge(2,4,0),Edge(4,3,0),
+                                    Edge(5,4,12345),Edge(4,6,0),Edge(6,7,7858),Edge(8,3,0),Edge(8,7,0),
+                                    Edge(10,1,23554),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
+      val baselineTriples = Set(rawEdges.map { e =>
+        val et= new EdgeTriplet[Int, Int] 
+        et.srcId = e.srcId
+        et.srcAttr = 1
+        et.dstId = e.dstId
+        et.dstAttr = 1
+        et.attr = e.attr
+        et
+      })
+
+      val edges = sc.parallelize(rawEdges)
+      val g: Graph[Int,Int] = Graph(vertices, edges)
+      
+      val triples = g.triplets.collect.toSet
+      assert(triples.size == baselineTriples.size)
+      assert(triples === baselineTriples)
+      
+    }
+  }
+
+
   test("contractEdges") {
     withSpark(new SparkContext("local", "test")) { sc =>
 
 
       val vertices = sc.parallelize((1 to 10).map(x => (x.toLong, 1)))
       val rawEdges = Seq(Edge(1,2,1),Edge(2,3,1),Edge(3,1,1),Edge(2,4,0),Edge(4,3,0),
-                                    Edge(5,4,0),Edge(4,6,0),Edge(6,7,0),Edge(8,3,0),Edge(8,7,0),
-                                    Edge(10,1,0),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
+                                    Edge(5,4,12345),Edge(4,6,0),Edge(6,7,7858),Edge(8,3,0),Edge(8,7,0),
+                                    Edge(10,1,23554),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
       val edges = sc.parallelize(rawEdges)
       val g: Graph[Int,Int] = Graph(vertices, edges)
+      println("\nTriplets")
+      g.triplets.collect.map( a => println(a))
       val g1 = g.contractEdges({ (et: EdgeTriplet[Int,Int]) => (et.attr == 1) },
       { (et: EdgeTriplet[Int,Int]) => et.attr }, { (u: Int, v: Int) => u + v })
       // g1.edges.collect.map(e => println(e))
       // g1.edges.count
       // println(g1.flatMap { case (ccID, triples) => triples.toList }.count)
       // println(g1.edges.count)
-      g1.triplets.collect.map( t => println(t))
+      // println("Final graph edges")
+      // g1.edges.collect.map( t => println(t))
+      // println("\nVertices")
+      // g1.vertices.collect.map( t => println(t))
+      println("\nFinal Triplets")
+      g1.triplets.collect.map( a => println(a))
+
 
 
       //val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
