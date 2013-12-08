@@ -60,4 +60,14 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
     if (srcId == vid) srcAttr else { assert(dstId == vid); dstAttr }
 
   override def toString() = ((srcId, srcAttr), (dstId, dstAttr), attr).toString()
+
+  def copyTriple(): EdgeTriplet[VD,ED] = {
+    val curTriplet = new EdgeTriplet[VD,ED]
+    curTriplet.srcId = srcId
+    curTriplet.srcAttr = srcAttr
+    curTriplet.dstId = dstId
+    curTriplet.dstAttr = dstAttr
+    curTriplet.attr = attr
+    curTriplet
+  }
 }

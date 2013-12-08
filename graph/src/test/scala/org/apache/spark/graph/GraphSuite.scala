@@ -1,6 +1,8 @@
 package org.apache.spark.graph
 
 import org.scalatest.FunSuite
+import scala.collection.mutable
+import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graph.Graph._
@@ -304,7 +306,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val rawEdges = Seq(Edge(1,2,1),Edge(2,3,1),Edge(3,1,1),Edge(2,4,0),Edge(4,3,0),
                                     Edge(5,4,12345),Edge(4,6,0),Edge(6,7,7858),Edge(8,3,0),Edge(8,7,0),
                                     Edge(10,1,23554),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
-      val baselineTriples = Set(rawEdges.map { e =>
+      val baselineTriples = rawEdges.map { e =>
         val et= new EdgeTriplet[Int, Int] 
         et.srcId = e.srcId
         et.srcAttr = 1
@@ -312,14 +314,18 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         et.dstAttr = 1
         et.attr = e.attr
         et
-      })
+      }.toList.toSet
 
       val edges = sc.parallelize(rawEdges)
       val g: Graph[Int,Int] = Graph(vertices, edges)
       
-      val triples = g.triplets.collect.toSet
-      assert(triples.size == baselineTriples.size)
+      // val set = mutable.HashSet[EdgeTriplet[Int, Int]]()
+      val triples = g.triplets.map(_.copyTriple).collect.toSet
+      // triples.map(e => set.add(e))
+      // triples.count
+      // val resTriples = triples.collect.toSet
       assert(triples === baselineTriples)
+      assert(triples.size === baselineTriples.size)
       
     }
   }
@@ -335,40 +341,41 @@ class GraphSuite extends FunSuite with LocalSparkContext {
                                     Edge(10,1,23554),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
       val edges = sc.parallelize(rawEdges)
       val g: Graph[Int,Int] = Graph(vertices, edges)
-      println("\nTriplets")
-      g.triplets.collect.map( a => println(a))
       val g1 = g.contractEdges({ (et: EdgeTriplet[Int,Int]) => (et.attr == 1) },
       { (et: EdgeTriplet[Int,Int]) => et.attr }, { (u: Int, v: Int) => u + v })
-      // g1.edges.collect.map(e => println(e))
-      // g1.edges.count
-      // println(g1.flatMap { case (ccID, triples) => triples.toList }.count)
-      // println(g1.edges.count)
-      // println("Final graph edges")
-      // g1.edges.collect.map( t => println(t))
-      // println("\nVertices")
-      // g1.vertices.collect.map( t => println(t))
-      println("\nFinal Triplets")
-      g1.triplets.collect.map( a => println(a))
-
-
-
-      //val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
-      //val b = VertexSetRDD(a).mapValues(x => -x)
-      //assert(b.count === 101)
-      //assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
-      //val c = VertexSetRDD(a, b.index)
-      //assert(b.leftJoin(c){ (id, b, cOpt) => b + cOpt.get }.map(x=> x._2).reduce(_+_) === 0)
-      //val d = c.filter(q => ((q._2 % 2) == 0))
-      //val e = a.filter(q => ((q._2 % 2) == 0))
-      //assert(d.count === e.count)
-      //assert(b.zipJoin(c)((id, b, c) => b + c).map(x => x._2).reduce(_+_) === 0)
-
+      def createTriple(sid: Vid, did: Vid, sattr: Int, dattr: Int, eattr: Int): EdgeTriplet[Int,Int] = {
+        val et = new EdgeTriplet[Int,Int]
+        et.srcId = sid
+        et.dstId = did
+        et.srcAttr = sattr
+        et.dstAttr = dattr
+        et.attr = eattr
+        et
+      }
+      val result = g1.triplets.map(_.copyTriple).collect.toSet
+      // This is what the result of coarsen should look like based on doing it out by hand
+      val baseTriples = Set(
+        // Edge(4,3,0),
+        createTriple(4,1,1,3,0),
+        // Edge(5,4,12345)
+        createTriple(5,4,1,1,12345),
+        // Edge(4,6,0)
+        createTriple(4,6,1,1,0),
+        // Edge(6,7,7858)
+        createTriple(6,7,1,1,7858),
+        // Edge(8,3,0)
+        createTriple(8,1,3,3,0),
+        // Edge(8,7,0)
+        createTriple(8,7,3,1,0),
+        // Edge(10,1,23554)
+        createTriple(8,1,3,3,23554),
+        // Edge(2,4,0)
+        createTriple(1,4,3,1,0))
+        
+      assert(result === baseTriples)
+      assert(result.size === baseTriples.size)
     }
   }
-
-
-
-
 }
 
 
