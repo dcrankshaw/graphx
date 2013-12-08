@@ -495,6 +495,12 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       val srcJoinedDst: RDD[((Vid,Vid), (Vid, Vid))] = newSrcVids.join(newDstVids)
       val srcJoinedDstJoinedData: RDD[((Vid,Vid), ((Vid,Vid),ED))] = srcJoinedDst.join(dataRDD)
 
+      // val newEdges: RDD[Edge[ED]] = newSrcVids.join(newDstVids).join(dataRDD)
+      //   .map { case (_: (Vid,Vid), ((newSrc: Vid, newDst: Vid), data: ED)) => Edge(newSrc, newDst, data)}
+
+        
+      val srcJoinedDst: RDD[((Vid,Vid), (Vid, Vid))] = newSrcVids.join(newDstVids)
+      val srcJoinedDstJoinedData: RDD[((Vid,Vid), ((Vid,Vid),ED))] = srcJoinedDst.join(dataRDD)
 
       val newEdges: RDD[Edge[ED]] = srcJoinedDstJoinedData
         .map { case ((_: Vid, _: Vid), ((newSrc: Vid, newDst: Vid), data: ED)) => Edge(newSrc, newDst, data)}
@@ -506,6 +512,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       newEdges
     }
 
+    // filter out self-loops
     val newEdges: RDD[Edge[ED]] = updateETable(updatedVertexIDs, uncontractedEdges.edges)
     // newEdges.count
     val filteredEdges = newEdges.filter(e => e.srcId != e.dstId)
