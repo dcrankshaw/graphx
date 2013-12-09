@@ -25,13 +25,14 @@ object DataflowPageRank extends Logging {
         val target = lineArray(1).trim.toLong
         (source, (target, "edge"))
       })
+    edges.count
     val start = System.currentTimeMillis
     logWarning("Starting pagerank")
     val ranks = DataflowPageRank.run(edges)
     println(ranks.count + " pages in graph")
     println("TIMEX: " + (System.currentTimeMillis - start)/1000.0)
-    val topRanks = ranks.top(30)(Ordering.by((entry: (Long, Double)) => entry._2))
-    println(topRanks.deep.mkString("\n"))
+    // val topRanks = ranks.top(30)(Ordering.by((entry: (Long, Double)) => entry._2))
+    // println(topRanks.deep.mkString("\n"))
     
   }
 
