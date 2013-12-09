@@ -1,6 +1,7 @@
 package org.apache.spark.graph
 
 import org.apache.spark.SparkContext
+import org.apache.spark.rdd._
 
 
 object GraphLoader {
@@ -97,4 +98,92 @@ object GraphLoader {
     Graph.fromEdges(edges, defaultVertexAttr, partitionStrategy)
   } // end of edgeListFile
 
+
+
+  def edgeListAndVertexListFiles[ED: ClassManifest](
+      sc: SparkContext,
+      edgePath: String,
+      vertexPath: String,
+      minEdgePartitions: Int = 1,
+      partitionStrategy: PartitionStrategy = RandomVertexCut):
+    Graph[String, Int] = {
+    // Parse the edge data table
+    val edges = sc.textFile(edgePath, minEdgePartitions).mapPartitions( iter =>
+      iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
+        val lineArray = line.split("\\s+")
+        if(lineArray.length < 2) {
+          println("Invalid line: " + line)
+          assert(false)
+        }
+        val source = lineArray(0).trim.toLong
+        val target = lineArray(1).trim.toLong
+        Edge(source, target, 1)
+        })
+
+    val vertices = sc.textFile(vertexPath, minEdgePartitions).mapPartitions( iter =>
+      iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
+        val lineArray = line.split("\\s+")
+        if(lineArray.length < 2) {
+          println("Invalid line: " + line)
+          assert(false)
+        }
+        val id = lineArray(0).trim.toLong
+        val attr = lineArray(1).trim
+        (id, attr)
+        })
+  
+    // val defaultVertexAttr = null.asInstanceOf[String]
+    Graph(vertices, edges, partitionStrategy=partitionStrategy)
+  } // end of edgeListFile
+
+  def loadEdges(
+    sc: SparkContext,
+    edgePath: String): RDD[Edge[Int]] = {
+
+    val edges = sc.textFile(edgePath, 128).mapPartitions( iter =>
+      iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
+        val lineArray = line.split("\\s+")
+        if(lineArray.length < 2) {
+          println("Invalid line: " + line)
+          assert(false)
+        }
+        val source = lineArray(0).trim.toLong
+        val target = lineArray(1).trim.toLong
+        Edge(source, target, 1)
+        })
+    edges
+  }
+
+
+  def loadVertices(
+    sc: SparkContext,
+    vertexPath: String): RDD[(Vid, String)] = {
+
+    val vertices = sc.textFile(vertexPath, 128).mapPartitions( iter =>
+      iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
+        val lineArray = line.split("\\s+")
+        if(lineArray.length < 2) {
+          println("Invalid line: " + line)
+          assert(false)
+        }
+        val id = lineArray(0).trim.toLong
+        val attr = lineArray.slice(1,lineArray.length).mkString(" ")
+        (id, attr)
+        })
+    vertices
+  }
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
