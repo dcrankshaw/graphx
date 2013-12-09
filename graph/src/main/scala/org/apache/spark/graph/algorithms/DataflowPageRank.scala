@@ -8,9 +8,11 @@ import org.apache.spark.SparkContext._
 object DataflowPageRank extends Logging {
 
   def main(args: Array[String]) = {
+    println("Starting pagerank.")
     val host = args(0)
     val fname = args(1)
-    val edgePartitions = if (args.length >= 3) args(2).trim.toInt else 128
+    // val edgePartitions = if (args.length >= 3) args(2).trim.toInt else 128
+    val edgePartitions = 128
     val sc = new SparkContext(host, "Dataflow PageRank(" + fname + ")")
     val edges = sc.textFile(fname, edgePartitions).mapPartitions( iter =>
       iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
