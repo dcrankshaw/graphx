@@ -2,6 +2,7 @@ package org.apache.spark.graph
 
 import org.apache.spark._
 import org.apache.spark.graph.algorithms._
+import org.apache.spark.graph.io._
 
 
 /**
