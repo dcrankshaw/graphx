@@ -109,4 +109,63 @@ object GraphLoader extends Logging {
     GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1)
   } // end of edgeListFile
 
+
+
+  def loadFromObjectFiles[VD: ClassManifest, ED: ClassManifest](
+      sc: SparkContext,
+      basePath: String)
+    : Graph[VD, ED] = {
+    
+    // TODO can use sc.objectFile()
+
+
+
+  }
+
+
+
+
+
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
