@@ -40,6 +40,11 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
    */
   def relativeDirection(vid: Vid): EdgeDirection =
     if (vid == srcId) EdgeDirection.Out else { assert(vid == dstId); EdgeDirection.In }
+
+  override def clone(): Edge[ED] = {
+    Edge(srcId, dstId, attr)
+  }
+
 }
 
 object Edge {

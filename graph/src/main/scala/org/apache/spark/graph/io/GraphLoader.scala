@@ -6,6 +6,7 @@ import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graph.impl.{EdgePartition, GraphImpl}
 import org.apache.spark.util.collection.PrimitiveVector
 import org.apache.spark.graph._
+import org.apache.spark._
 
 
 object GraphLoader extends Logging {
@@ -118,9 +119,11 @@ object GraphLoader extends Logging {
     : Graph[VD, ED] = {
     
     // TODO can use sc.objectFile()
-    val vertices: RDD[(Vid, VD)] = sc.objectFile(vpath)
-    val edges: RDD[Edge[ED]] = sc.objectFile(epath)
-    GraphImpl(vertices, edges)
+    // val vertices: RDD[(Vid, VD)] = sc.objectFile(vpath)
+    val vertices = sc.objectFile[(Vid,VD)](vpath, 1)
+    // val edges: RDD[Edge[ED]] = sc.objectFile(epath)
+    val edges = sc.objectFile[Edge[ED]](epath, 1)
+    GraphImpl(vertices, edges, null.asInstanceOf[VD])
   }
 
 

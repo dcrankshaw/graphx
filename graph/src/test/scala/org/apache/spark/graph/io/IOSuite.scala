@@ -4,7 +4,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import org.apache.spark.graph.Graph._
+import org.apache.spark.graph._
 import org.apache.spark.rdd._
 
 import java.io.{FileWriter, PrintWriter, File}
@@ -23,15 +23,16 @@ class IOSuite extends FunSuite with LocalSparkContext {
   }
 
   test("save as object files") {
-    sc = new SparkContext("local", "test")
-    val graph = starGraph(sc, 10)
-    val tempDir = Files.createTempDir()
-    val vpath = new File(tempDir, "output_vertices").getAbsolutePath
-    val epath = new File(tempDir, "output_edges").getAbsolutePath
-    GraphSaver.saveAsObjectFile(graph, vpath, epath)
-    val resultGraph = GraphLoader.loadFromObjectFiles(sc, outputDir)
-    assert(resultGraph.vertices.collect.toList === graph.vertices.collect.toList)
-    assert(resultGraph.edges.collect.toList === graph.edges.collect.toList)
+    withSpark { sc =>
+      val graph = starGraph(sc, 10)
+      val tempDir = Files.createTempDir()
+      val vpath = new File(tempDir, "output_vertices").getAbsolutePath
+      val epath = new File(tempDir, "output_edges").getAbsolutePath
+      GraphSaver.saveAsObjectFiles(graph, vpath, epath)
+      val resultGraph = GraphLoader.loadFromObjectFiles(sc, vpath, epath)
+      assert(resultGraph.vertices.collect.toSet === graph.vertices.collect.toSet)
+      assert(resultGraph.edges.collect.toSet === graph.edges.collect.toSet)
+    }
   }
 
 
