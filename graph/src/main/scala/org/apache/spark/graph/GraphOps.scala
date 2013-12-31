@@ -5,6 +5,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.SparkException
 import org.apache.spark.graph.algorithms.ConnectedComponents
 import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.util.ClosureCleaner
 import scala.collection.mutable
 
 
@@ -353,7 +354,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     val ccGraph: Graph[Vid,ED] = ConnectedComponents.run(edgesToContract)
 
     // join vertex data back with connected component data
-    val ccVerticesWithData: VertexRDD[(Vid,VD)] = edgesToContract.vertices.zipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
+    val ccVerticesWithData: VertexRDD[(Vid,VD)] = edgesToContract.vertices.innerZipJoin(ccGraph.vertices)((id, data, cc) => (cc,data))
     // TODO(dcrankshaw) might be able to make this Graph.apply() more efficient by reusing index
     // Alternatively, Joey's proposed partitioning change (we assume the graph is already partitioned)
     // might address this
@@ -492,8 +493,8 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       //   .map { case (_: (Vid,Vid), ((newSrc: Vid, newDst: Vid), data: ED)) => Edge(newSrc, newDst, data)}
 
         
-      val srcJoinedDst: RDD[((Vid,Vid), (Vid, Vid))] = newSrcVids.join(newDstVids)
-      val srcJoinedDstJoinedData: RDD[((Vid,Vid), ((Vid,Vid),ED))] = srcJoinedDst.join(dataRDD)
+      // val srcJoinedDst: RDD[((Vid,Vid), (Vid, Vid))] = newSrcVids.join(newDstVids)
+      // val srcJoinedDstJoinedData: RDD[((Vid,Vid), ((Vid,Vid),ED))] = srcJoinedDst.join(dataRDD)
 
       // val newEdges: RDD[Edge[ED]] = newSrcVids.join(newDstVids).join(dataRDD)
       //   .map { case (_: (Vid,Vid), ((newSrc: Vid, newDst: Vid), data: ED)) => Edge(newSrc, newDst, data)}
