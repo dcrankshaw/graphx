@@ -17,20 +17,20 @@ object GraphSaver extends Logging {
   // TODO might have to serialize each object first, then write the serialized entries
   // as byte arrays - RDD.saveAsObjectFile() looks like it might serialize entire partition
   // at once which I don't think is what we want here
-  def saveAsObjectFiles[VD,ED]( graph: Graph[VD, ED], path: String) {
+  def saveAsObjectFiles[VD,ED]( graph: Graph[VD, ED], vpath: String, epath:String) {
     // TODO verify pathnames will work as intended
-    graph.edges.saveAsObjectFile(path + "_edges")
-    graph.vertices.saveAsObjectFile(path + "_vertices")
+    graph.edges.saveAsObjectFile(epath)
+    graph.vertices.saveAsObjectFile(vpath)
   }
 
 
   // Note that when loading this graph again, the graph will be split into the
   // same number of partitions
-  def saveWithMetadata[VD,ED](graph: Graph[VD,ED], path: String) {
+  // def saveWithMetadata[VD,ED](graph: Graph[VD,ED], path: String) {
 
-    // TODO not sure what this should look like
+  //   // TODO not sure what this should look like
 
-  }
+  // }
 
 
 }

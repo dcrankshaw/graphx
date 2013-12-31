@@ -113,17 +113,15 @@ object GraphLoader extends Logging {
 
   def loadFromObjectFiles[VD: ClassManifest, ED: ClassManifest](
       sc: SparkContext,
-      basePath: String)
+      vpath: String,
+      epath: String)
     : Graph[VD, ED] = {
     
     // TODO can use sc.objectFile()
-
-
-
+    val vertices: RDD[(Vid, VD)] = sc.objectFile(vpath)
+    val edges: RDD[Edge[ED]] = sc.objectFile(epath)
+    GraphImpl(vertices, edges)
   }
-
-
-
 
 
 }
