@@ -87,4 +87,50 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("contractEdges") {
+    withSpark { sc =>
+
+
+      val vertices = sc.parallelize((1 to 10).map(x => (x.toLong, 1)))
+      val rawEdges = Seq(Edge(1,2,1),Edge(2,3,1),Edge(3,1,1),Edge(2,4,0),Edge(4,3,0),
+                                    Edge(5,4,12345),Edge(4,6,0),Edge(6,7,7858),Edge(8,3,0),Edge(8,7,0),
+                                    Edge(10,1,23554),Edge(8,9,1),Edge(9,10,1),Edge(10,8,1))
+      val edges = sc.parallelize(rawEdges)
+      val g: Graph[Int,Int] = Graph(vertices, edges)
+      val g1 = g.contractEdges({ (et: EdgeTriplet[Int,Int]) => (et.attr == 1) },
+      { (et: EdgeTriplet[Int,Int]) => et.attr }, { (u: Int, v: Int) => u + v })
+      def createTriple(sid: Vid, did: Vid, sattr: Int, dattr: Int, eattr: Int): EdgeTriplet[Int,Int] = {
+        val et = new EdgeTriplet[Int,Int]
+        et.srcId = sid
+        et.dstId = did
+        et.srcAttr = sattr
+        et.dstAttr = dattr
+        et.attr = eattr
+        et
+      }
+      val result = g1.triplets.map(_.copyTriple).collect.toSet
+      // This is what the result of coarsen should look like based on doing it out by hand
+      val baseTriples = Set(
+        // Edge(4,3,0),
+        createTriple(4,1,1,3,0),
+        // Edge(5,4,12345)
+        createTriple(5,4,1,1,12345),
+        // Edge(4,6,0)
+        createTriple(4,6,1,1,0),
+        // Edge(6,7,7858)
+        createTriple(6,7,1,1,7858),
+        // Edge(8,3,0)
+        createTriple(8,1,3,3,0),
+        // Edge(8,7,0)
+        createTriple(8,7,3,1,0),
+        // Edge(10,1,23554)
+        createTriple(8,1,3,3,23554),
+        // Edge(2,4,0)
+        createTriple(1,4,3,1,0))
+        
+      assert(result === baseTriples)
+      assert(result.size === baseTriples.size)
+    }
+  }
+
 }
