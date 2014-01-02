@@ -116,7 +116,7 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
     // Sample the tokens
     val gTmp = Graph.fromEdgeTuples(renumbered, false).mapEdges { (pid, iter) =>
         val gen = new java.util.Random(pid)
-        iter.map(e => 3)//gen.nextInt(nT))
+        iter.map(e => gen.nextInt(nT))
       }
     // Compute the topic histograms (factors) for each word and document
     val newCounts = gTmp.mapReduceTriplets[Factor](
@@ -145,9 +145,9 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
   /**
    * The total counts for each topic
    */
-  var topicHist = graph.edges.map(e => e.attr)
+  var totalHist = graph.edges.map(e => e.attr)
     .aggregate(new Factor(nTopics))(LDA.addEq(_, _), LDA.addEq(_, _))
-  assert(topicHist.sum == nTokens)
+  assert(totalHist.sum == nTokens)
 
   /**
    * The internal iteration tracks the number of times the random number
@@ -170,7 +170,7 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
         println("here comes the error")
       }
       // Broadcast the topic histogram
-      val topicHistbcast = sc.broadcast(topicHist)
+      val totalHistbcast = sc.broadcast(totalHist)
       // Shadowing because scala's closure capture is an abomination
       val a = alpha
       val b = beta
@@ -179,48 +179,38 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
       // Define the function to sample a single token
       // I had originally used def sampleToken but this leads to closure capture of the LDA class (an abomination).
       val sampleToken = (gen: java.util.Random, triplet: EdgeTriplet[Factor, TopicId]) => {
-        val w: Array[Count] = triplet.srcAttr
-        val d: Array[Count] = triplet.dstAttr
-        assert(w ne d)
-        assert(triplet.srcId >= 0)
-        assert(triplet.dstId < 0)
-        val total: Array[Count] = topicHistbcast.value
+        val wHist: Array[Count] = triplet.srcAttr
+        val dHist: Array[Count] = triplet.dstAttr
+        val totalHist: Array[Count] = totalHistbcast.value
         val oldTopic = triplet.attr
-        if(total(oldTopic) <= 0) {
-          println("Strange error")
-          println(oldTopic)
-        }
-        assert(w(oldTopic) > 0)
-        assert(d(oldTopic) > 0)
-        assert(total(oldTopic) > 0)
-        w(oldTopic) -= 1
-        d(oldTopic) -= 1
-        total(oldTopic) -= 1
+        assert(wHist(oldTopic) > 0)
+        assert(dHist(oldTopic) > 0)
+        assert(totalHist(oldTopic) > 0)
         // Construct the conditional
         val conditional = new Array[Double](nt)
         var t = 0
-        //    var conditionalSum = 0.0
-        //    while (t < conditional.size) {
-        //      conditional(t) = (a + d(t)) * (b + w(t)) / (b * nw + total(t))
-        //      conditionalSum += conditional(t)
-        //      t += 1
-        //    }
-        //    assert(conditionalSum > 0.0)
-        //    // Generate a random number between [0, conditionalSum)
-        //    val u = gen.nextDouble() * conditionalSum
-        //    assert(u < conditionalSum)
-        //    // Draw the new topic from the multinomial
-        //    t = 0
-        //    var cumsum = conditional(t)
-        //    while(cumsum < u) {
-        //      t += 1
-        //      cumsum += conditional(t)
-        //    }
+        var conditionalSum = 0.0
+        while (t < conditional.size) {
+          val cavityOffset = if (t == oldTopic) 1 else 0
+          val w = wHist(t) - cavityOffset
+          val d = dHist(t) - cavityOffset
+          val total = totalHist(t) - cavityOffset
+          conditional(t) = (a + d) * (b + w) / (b * nw + total)
+          conditionalSum += conditional(t)
+          t += 1
+        }
+        assert(conditionalSum > 0.0)
+        // Generate a random number between [0, conditionalSum)
+        val u = gen.nextDouble() * conditionalSum
+        assert(u < conditionalSum)
+        // Draw the new topic from the multinomial
+        t = 0
+        var cumsum = conditional(t)
+        while(cumsum < u) {
+          t += 1
+          cumsum += conditional(t)
+        }
         val newTopic = t
-        // Cheat !!!! and modify the vertex and edge attributes in place
-        w(newTopic) += 1
-        d(newTopic) += 1
-        total(newTopic) += 1 // <-- This might be dangerous
         // Return the new topic
         newTopic
       }
@@ -240,9 +230,9 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
       graph = graph.outerJoinVertices(newCounts) { (_, _, newFactorOpt) => newFactorOpt.get }
 
       // Recompute the global counts (the actual action)
-      topicHist = graph.edges.map(e => e.attr)
+      totalHist = graph.edges.map(e => e.attr)
         .aggregate(new Factor(nt))(LDA.addEq(_, _), LDA.addEq(_, _))
-      assert(topicHist.sum == nTokens)
+      assert(totalHist.sum == nTokens)
 
       internalIteration += 1
       println("Sampled iteration: " + i.toString)
@@ -319,7 +309,7 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
 
 object TopicModeling {
   def main(args: Array[String]) {
-    val host = "local[2]" // args(0)
+    val host = "local" // args(0)
     val options =  args.drop(3).map { arg =>
       arg.dropWhile(_ == '-').split('=') match {
         case Array(opt, v) => (opt -> v)
