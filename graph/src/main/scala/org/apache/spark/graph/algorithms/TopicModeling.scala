@@ -1,6 +1,5 @@
 package org.apache.spark.graph.algorithms
 
-import util.Random
 import org.apache.spark.graph._
 import org.apache.spark.rdd.RDD
 import org.apache.spark._
@@ -13,7 +12,28 @@ object LDA {
   type TopicId = Int
   type Count = Int
 
-  class Posterior (docs: VertexRDD[Array[Count]], words: VertexRDD[Array[Count]])
+
+  type Factor = Array[Count]
+
+  class Posterior (docs: VertexRDD[Factor], words: VertexRDD[Factor])
+
+  def addEq(a: Factor, b: Factor): Factor = {
+    assert(a.size == b.size)
+    var i = 0
+    while (i < a.size) {
+      a(i) += b(i)
+      i += 1
+    }
+    a
+  }
+
+  def addEq(a: Factor, t: TopicId): Factor = { a(t) += 1; a }
+
+  def makeFactor(nTopics: Int, topic: TopicId): Factor = {
+    val f = new Factor(nTopics)
+    f(topic) += 1
+    f
+  }
 
   /**
    * The Factor class represents a vector of counts that is nTopics long.
@@ -28,59 +48,62 @@ object LDA {
    * @param topic
    * @param counts
    */
-  class Factor(private val nTopics: TopicId = 0, private var topic: TopicId = -1,
-               private var counts: Array[Count] = null) extends Serializable {
-
-    def this(nTopics: TopicId, topic: TopicId) = this(nTopics, topic, null)
-    def this(nTopics: TopicId, counts: Array[Count]) = this(nTopics, -1, counts)
-
-    def empty: Boolean = (topic == -1 && counts == null)
-
-    def makeDense() {
-      if (counts == null) {
-        counts = new Array[Count](nTopics)
-        if (topic >= 0) counts(topic) = 1
-        topic = -1
-      }
-    }
-
-    def +=(other: Factor) {
-      makeDense()
-      if(!other.empty) {
-        if (other.counts == null) {
-          counts(other.topic) += 1
-        } else {
-          var i = 0
-          assert(counts ne other.counts)
-          while (i < other.counts.size) {
-            counts(i) += other.counts(i)
-            i += 1
-          }
-        }
-      }
-    }
-
-    def asCounts(): Array[Count] = {
-      makeDense()
-      counts
-    }
-  } // end of Factor
+//  class Factor(private val nTopics: TopicId = 0, private var topic: TopicId = -1,
+//               private var counts: Array[Count] = null) extends Serializable {
+//
+//    def this(nTopics: TopicId, topic: TopicId) = this(nTopics, topic, null)
+//    def this(nTopics: TopicId, counts: Array[Count]) = this(nTopics, -1, counts)
+//
+//    def empty: Boolean = (topic == -1 && counts == null)
+//
+//    def makeDense() {
+//      if (counts == null) {
+//        counts = new Array[Count](nTopics)
+//        if (topic >= 0) counts(topic) = 1
+//        topic = -1
+//      }
+//    }
+//
+//    def +=(other: Factor) {
+//      makeDense()
+//      if(!other.empty) {
+//        if (other.counts == null) {
+//          counts(other.topic) += 1
+//        } else {
+//          var i = 0
+//          assert(counts ne other.counts)
+//          while (i < other.counts.size) {
+//            counts(i) += other.counts(i)
+//            i += 1
+//          }
+//        }
+//      }
+//    }
+//
+//    def asCounts(): Array[Count] = {
+//      makeDense()
+//      counts
+//    }
+//  } // end of Factor
 
 } // end of LDA singleton
+
+
+
 
 
 class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
           val nTopics: Int = 100,
           val alpha: Double = 0.1,
-          val beta: Double = 0.1) extends Serializable {
+          val beta: Double = 0.1) {
   import LDA._
 
-  @transient private val sc = tokens.sparkContext
+  private val sc = tokens.sparkContext
 
   /**
    * The bipartite terms by document graph.
    */
-  @transient var graph: Graph[Factor, TopicId] = {
+  var graph: Graph[Factor, TopicId] = {
     // To setup a bipartite graph it is necessary to ensure that the document and
     // word ids are in a different namespace
     val renumbered = tokens.map { case (wordId, docId) =>
@@ -89,153 +112,50 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
       val newDocId: DocId = -(docId + 1L)
       (wordId, newDocId)
     }
-    Graph.fromEdgeTuples(renumbered, false)
-      .mapVertices((id, _) => new Factor(nTopics))
-      .mapEdges(e => Random.nextInt(nTopics)).cache
-  }
-
-  def verify() {
-    val vfactor = graph.vertices.filter{ case (id, f) => (id == 1) }.map(p => p._2.asCounts).collect.first
-    val edges = graph.edges.filter(e => e.srcId == 1).map(e => e.attr).collect
-    updateCounts()
-    val vfactor1 = graph.vertices.filter{ case (id, f) => (id == 1) }.map(p => p._2.asCounts).collect.first
-    val edges1 = graph.edges.filter(e => e.srcId == 1).map(e => e.attr).collect
-    println(edges)
-    println(vfactor)
-
-//
-//    val f = graph.vertices.map { case (id, f) => f }.reduce{ (a, b) => a += b; a }
-//    for (c <- f.asCounts) {
-//      assert( c >= 0 )
-//      assert( c % 2 == 0 )
-//    }
-//    assert(f.asCounts.sum % 2 == 0)
-//    assert(f.asCounts.sum / 2 == graph.numEdges)
-
+    val nT = nTopics
+    // Sample the tokens
+    val gTmp = Graph.fromEdgeTuples(renumbered, false).mapEdges { (pid, iter) =>
+        val gen = new java.util.Random(pid)
+        iter.map(e => 3)//gen.nextInt(nT))
+      }
+    // Compute the topic histograms (factors) for each word and document
+    val newCounts = gTmp.mapReduceTriplets[Factor](
+      e => Iterator((e.srcId, makeFactor(nT, e.attr)), (e.dstId, makeFactor(nT, e.attr))),
+      (a, b) => addEq(a,b) )
+    // Update the graph with the factors
+    gTmp.outerJoinVertices(newCounts) { (_, _, newFactorOpt) => newFactorOpt.get }
+    // Trigger computation of the topic counts
   }
 
   /**
    * The number of unique words in the corpus
    */
-  val nwords = graph.vertices.filter{ case (vid, c) => vid >= 0 }.count()
+  val nWords = graph.vertices.filter{ case (vid, c) => vid >= 0 }.count()
 
   /**
    * The number of documents in the corpus
    */
-  val ndocs = graph.vertices.filter{ case (vid, c) => vid < 0 }.count()
+  val nDocs = graph.vertices.filter{ case (vid, c) => vid < 0 }.count()
+
+  /**
+   * The number of tokens
+   */
+  val nTokens = graph.edges.count()
 
   /**
    * The total counts for each topic
    */
-  var topicC: Broadcast[Array[Count]] = null
-
-  // Execute update counts after initializing all the member
-  updateCounts()
-
+  var topicHist = graph.edges.map(e => e.attr)
+    .aggregate(new Factor(nTopics))(LDA.addEq(_, _), LDA.addEq(_, _))
+  assert(topicHist.sum == nTokens)
 
   /**
-   * The update counts function updates the term and document counts in the
-   * graph as well as the overall topic count based on the current topic
-   * assignments of each token (the edge attributes).
-   *
+   * The internal iteration tracks the number of times the random number
+   * generator was created.  In constructing the graph the generated is created
+   * once and then once for each iteration
    */
-  def updateCounts() {
-    implicit object FactorAccumParam extends AccumulatorParam[Factor] {
-      def addInPlace(a: Factor, b: Factor): Factor = { a += b; a }
-      def zero(initialValue: Factor): Factor = new Factor(nTopics)
-    }
-    val accum = sc.accumulator(new Factor(nTopics))
+  private var internalIteration = 1
 
-    def mapFun(e: EdgeTriplet[Factor, TopicId]): Iterator[(Vid, Factor)] = {
-      assert(e.attr >= 0)
-      accum += new Factor(nTopics, e.attr)
-      Iterator((e.srcId, new Factor(nTopics, e.attr)), (e.dstId, new Factor(nTopics, e.attr)))
-    }
-    val newCounts = graph.mapReduceTriplets[Factor](mapFun, (a, b) => { a += b; a } )
-    graph = graph.outerJoinVertices(newCounts) { (vid, oldFactor, newFactorOpt) => newFactorOpt.get }
-    // Trigger computation of the topic counts
-    // TODO: We should uncache the graph at some point.
-    graph.cache
-    graph.vertices.foreach(x => ())
-    val globalCounts: Factor = accum.value
-    topicC = sc.broadcast(globalCounts.asCounts())
-  } // end of update counts
-
-  def topWords(k: Int): Array[Array[(Count, WordId)]] = {
-    graph.vertices.filter {
-      case (vid, c) => vid >= 0
-    }.mapPartitions { items =>
-      val queues = Array.fill(nTopics)(new BoundedPriorityQueue[(Count, WordId)](k))
-      for ((wordId, factor) <- items) {
-        var t = 0
-        val counts: Array[Count] = factor.asCounts()
-        while (t < nTopics) {
-          val tpl: (Count, WordId) = (counts(t), wordId)
-          queues(t) += tpl
-          t += 1
-        }
-      }
-      Iterator(queues)
-    }.reduce { (q1, q2) =>
-      q1.zip(q2).foreach { case (a,b) => a ++= b }
-      q1
-    }.map ( q => q.toArray )
-  } // end of TopWords
-
-
-  private def sampleToken(triplet: EdgeTriplet[Factor, TopicId]): TopicId = {
-    val w: Array[Count] = triplet.srcAttr.asCounts()
-    val d: Array[Count] = triplet.dstAttr.asCounts()
-    assert(w ne d)
-    assert(triplet.srcId >= 0)
-    assert(triplet.dstId < 0)
-    val total: Array[Count] = topicC.value
-    val oldTopic = triplet.attr
-    if(triplet.srcId != 1) {
-      return oldTopic
-    }
-
-    // Subtract out the old assignment from the counts
-    if(triplet.srcId == 1) {
-      println(w.sum)
-    }
-    if(w(oldTopic) <= 0) {
-      println("Strange error")
-    }
-    assert(w(oldTopic) > 0)
-    assert(d(oldTopic) > 0)
-    assert(total(oldTopic) > 0)
-    w(oldTopic) -= 1
-    d(oldTopic) -= 1
-    total(oldTopic) -= 1
-    // Construct the conditional
-    val conditional = new Array[Double](nTopics)
-    var t = 0
-//    var conditionalSum = 0.0
-//    while (t < conditional.size) {
-//      conditional(t) = (alpha + d(t)) * (beta + w(t)) / (beta * nwords + total(t))
-//      conditionalSum += conditional(t)
-//      t += 1
-//    }
-//    assert(conditionalSum > 0.0)
-//    // Generate a random number between [0, conditionalSum)
-//    val u = Random.nextDouble() * conditionalSum
-//    assert(u < conditionalSum)
-//    // Draw the new topic from the multinomial
-//    t = 0
-//    var cumsum = conditional(t)
-//    while(cumsum < u) {
-//      t += 1
-//      cumsum += conditional(t)
-//    }
-    val newTopic = t
-    // Cheat !!!! and modify the vertex and edge attributes in place
-    w(newTopic) += 1
-    d(newTopic) += 1
-    total(newTopic) += 1 // <-- This might be dangerous
-    // Return the new topic
-    newTopic
-  }
 
   /**
    * Run the gibbs sampler
@@ -246,17 +166,150 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
     // Run the sampling
     for (i <- 0 until nIter) {
       println("Starting iteration: " + i.toString)
+      if(i == 2) {
+        println("here comes the error")
+      }
+      // Broadcast the topic histogram
+      val topicHistbcast = sc.broadcast(topicHist)
+      // Shadowing because scala's closure capture is an abomination
+      val a = alpha
+      val b = beta
+      val nt = nTopics
+      val nw = nWords
+      // Define the function to sample a single token
+      // I had originally used def sampleToken but this leads to closure capture of the LDA class (an abomination).
+      val sampleToken = (gen: java.util.Random, triplet: EdgeTriplet[Factor, TopicId]) => {
+        val w: Array[Count] = triplet.srcAttr
+        val d: Array[Count] = triplet.dstAttr
+        assert(w ne d)
+        assert(triplet.srcId >= 0)
+        assert(triplet.dstId < 0)
+        val total: Array[Count] = topicHistbcast.value
+        val oldTopic = triplet.attr
+        if(total(oldTopic) <= 0) {
+          println("Strange error")
+          println(oldTopic)
+        }
+        assert(w(oldTopic) > 0)
+        assert(d(oldTopic) > 0)
+        assert(total(oldTopic) > 0)
+        w(oldTopic) -= 1
+        d(oldTopic) -= 1
+        total(oldTopic) -= 1
+        // Construct the conditional
+        val conditional = new Array[Double](nt)
+        var t = 0
+        //    var conditionalSum = 0.0
+        //    while (t < conditional.size) {
+        //      conditional(t) = (a + d(t)) * (b + w(t)) / (b * nw + total(t))
+        //      conditionalSum += conditional(t)
+        //      t += 1
+        //    }
+        //    assert(conditionalSum > 0.0)
+        //    // Generate a random number between [0, conditionalSum)
+        //    val u = gen.nextDouble() * conditionalSum
+        //    assert(u < conditionalSum)
+        //    // Draw the new topic from the multinomial
+        //    t = 0
+        //    var cumsum = conditional(t)
+        //    while(cumsum < u) {
+        //      t += 1
+        //      cumsum += conditional(t)
+        //    }
+        val newTopic = t
+        // Cheat !!!! and modify the vertex and edge attributes in place
+        w(newTopic) += 1
+        d(newTopic) += 1
+        total(newTopic) += 1 // <-- This might be dangerous
+        // Return the new topic
+        newTopic
+      }
+
       // Resample all the tokens
-      graph = graph.mapTriplets(sampleToken _)
-      updateCounts() // <-- This is an action
+      val parts = graph.edges.partitions.size
+      val interIter = internalIteration
+      graph = graph.mapTriplets { (pid, iter) =>
+        val gen = new java.util.Random(parts * interIter + pid)
+        iter.map(token => sampleToken(gen, token))
+      }
+
+      // Update the counts
+      val newCounts = graph.mapReduceTriplets[Factor](
+        e => Iterator((e.srcId, makeFactor(nt, e.attr)), (e.dstId, makeFactor(nt, e.attr))),
+        (a, b) => { addEq(a,b); a } )
+      graph = graph.outerJoinVertices(newCounts) { (_, _, newFactorOpt) => newFactorOpt.get }
+
+      // Recompute the global counts (the actual action)
+      topicHist = graph.edges.map(e => e.attr)
+        .aggregate(new Factor(nt))(LDA.addEq(_, _), LDA.addEq(_, _))
+      assert(topicHist.sum == nTokens)
+
+      internalIteration += 1
       println("Sampled iteration: " + i.toString)
     }
-  }
+  } // end of iterate
+
+
+
+//
+//  /**
+//   * The update counts function updates the term and document counts in the
+//   * graph as well as the overall topic count based on the current topic
+//   * assignments of each token (the edge attributes).
+//   *
+//   */
+//  def updateCounts() {
+//    implicit object FactorAccumParam extends AccumulatorParam[Factor] {
+//      def addInPlace(a: Factor, b: Factor): Factor = { a += b; a }
+//      def zero(initialValue: Factor): Factor = new Factor(nTopics)
+//    }
+//    val accum = sc.accumulator(new Factor(nTopics))
+//
+//    def mapFun(e: EdgeTriplet[Factor, TopicId]): Iterator[(Vid, Factor)] = {
+//      assert(e.attr >= 0)
+//      accum += new Factor(nTopics, e.attr)
+//      Iterator((e.srcId, new Factor(nTopics, e.attr)), (e.dstId, new Factor(nTopics, e.attr)))
+//    }
+//    val newCounts = graph.mapReduceTriplets[Factor](mapFun, (a, b) => { a += b; a } )
+//    graph = graph.outerJoinVertices(newCounts) { (vid, oldFactor, newFactorOpt) => newFactorOpt.get }.cache
+//    // Trigger computation of the topic counts
+//    // TODO: We should uncache the graph at some point.
+//    //graph.cache
+//    graph.vertices.foreach(x => ())
+//    val globalCounts: Factor = accum.value
+//    assert(globalCounts.asCounts().sum == ntokens)
+//    topicC = sc.broadcast(globalCounts.asCounts())
+//  } // end of update counts
+
+//  def topWords(k: Int): Array[Array[(Count, WordId)]] = {
+//    graph.vertices.filter {
+//      case (vid, c) => vid >= 0
+//    }.mapPartitions { items =>
+//      val queues = Array.fill(nTopics)(new BoundedPriorityQueue[(Count, WordId)](k))
+//      for ((wordId, factor) <- items) {
+//        var t = 0
+//        val counts: Array[Count] = factor.asCounts()
+//        while (t < nTopics) {
+//          val tpl: (Count, WordId) = (counts(t), wordId)
+//          queues(t) += tpl
+//          t += 1
+//        }
+//      }
+//      Iterator(queues)
+//    }.reduce { (q1, q2) =>
+//      q1.zip(q2).foreach { case (a,b) => a ++= b }
+//      q1
+//    }.map ( q => q.toArray )
+//  } // end of TopWords
+
+
+
+
 
   def posterior: Posterior = {
     graph.cache()
-    val words = graph.vertices.filter { case (vid, _) => vid >= 0 }.mapValues(_.asCounts())
-    val docs =  graph.vertices.filter { case (vid,_) => vid < 0 }.mapValues(_.asCounts())
+    val words = graph.vertices.filter { case (vid, _) => vid >= 0 }
+    val docs =  graph.vertices.filter { case (vid,_) => vid < 0 }
     new LDA.Posterior(words, docs)
   }
 
@@ -266,7 +319,7 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
 
 object TopicModeling {
   def main(args: Array[String]) {
-    val host = "local" // args(0)
+    val host = "local[2]" // args(0)
     val options =  args.drop(3).map { arg =>
       arg.dropWhile(_ == '-').split('=') match {
         case Array(opt, v) => (opt -> v)
@@ -279,7 +332,7 @@ object TopicModeling {
     var numVPart = 4
     var numEPart = 4
     var partitionStrategy: Option[PartitionStrategy] = None
-    var nIter = 5
+    var nIter = 3
     var nTopics = 10
     var alpha = 0.1
     var beta  = 0.1
@@ -350,9 +403,8 @@ object TopicModeling {
 //        // Iterator((termId, docId))
 //        Iterator.fill(count)((termId, docId))
 //      }
-
     val model = new LDA(rawTokens, nTopics, alpha, beta)
-    model.verify()
+  //  model.verify()
     model.iterate(nIter)
 
     sc.stop()
