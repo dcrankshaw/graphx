@@ -123,7 +123,7 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
       e => Iterator((e.srcId, makeFactor(nT, e.attr)), (e.dstId, makeFactor(nT, e.attr))),
       (a, b) => addEq(a,b) )
     // Update the graph with the factors
-    gTmp.outerJoinVertices(newCounts) { (_, _, newFactorOpt) => newFactorOpt.get }
+    gTmp.outerJoinVertices(newCounts) { (_, _, newFactorOpt) => newFactorOpt.get }.cache
     // Trigger computation of the topic counts
   }
 
@@ -227,7 +227,7 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
       val newCounts = graph.mapReduceTriplets[Factor](
         e => Iterator((e.srcId, makeFactor(nt, e.attr)), (e.dstId, makeFactor(nt, e.attr))),
         (a, b) => { addEq(a,b); a } )
-      graph = graph.outerJoinVertices(newCounts) { (_, _, newFactorOpt) => newFactorOpt.get }
+      graph = graph.outerJoinVertices(newCounts) { (_, _, newFactorOpt) => newFactorOpt.get }.cache
 
       // Recompute the global counts (the actual action)
       totalHist = graph.edges.map(e => e.attr)
