@@ -12,7 +12,6 @@ object LDA {
   type TopicId = Int
   type Count = Int
 
-
   type Factor = Array[Count]
 
   class Posterior (docs: VertexRDD[Factor], words: VertexRDD[Factor])
@@ -34,58 +33,6 @@ object LDA {
     f(topic) += 1
     f
   }
-
-  /**
-   * The Factor class represents a vector of counts that is nTopics long.
-   *
-   * The factor class internally stores a single topic assignment (e.g., [0 0 0 1 0 0]) as
-   * a scalar (i.e., topicId = 3) rather than allocating an array.  This optimization is
-   * needed to efficienlty support adding token assignments to count vectors.
-   *
-   * The Factor class is a member of the LDA class because it relies on the nTopics member
-   * variable.
-   *
-   * @param topic
-   * @param counts
-   */
-//  class Factor(private val nTopics: TopicId = 0, private var topic: TopicId = -1,
-//               private var counts: Array[Count] = null) extends Serializable {
-//
-//    def this(nTopics: TopicId, topic: TopicId) = this(nTopics, topic, null)
-//    def this(nTopics: TopicId, counts: Array[Count]) = this(nTopics, -1, counts)
-//
-//    def empty: Boolean = (topic == -1 && counts == null)
-//
-//    def makeDense() {
-//      if (counts == null) {
-//        counts = new Array[Count](nTopics)
-//        if (topic >= 0) counts(topic) = 1
-//        topic = -1
-//      }
-//    }
-//
-//    def +=(other: Factor) {
-//      makeDense()
-//      if(!other.empty) {
-//        if (other.counts == null) {
-//          counts(other.topic) += 1
-//        } else {
-//          var i = 0
-//          assert(counts ne other.counts)
-//          while (i < other.counts.size) {
-//            counts(i) += other.counts(i)
-//            i += 1
-//          }
-//        }
-//      }
-//    }
-//
-//    def asCounts(): Array[Count] = {
-//      makeDense()
-//      counts
-//    }
-//  } // end of Factor
-
 } // end of LDA singleton
 
 
@@ -166,9 +113,6 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
     // Run the sampling
     for (i <- 0 until nIter) {
       println("Starting iteration: " + i.toString)
-      if(i == 2) {
-        println("here comes the error")
-      }
       // Broadcast the topic histogram
       val totalHistbcast = sc.broadcast(totalHist)
       // Shadowing because scala's closure capture is an abomination
@@ -239,62 +183,26 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
     }
   } // end of iterate
 
-
-
-//
-//  /**
-//   * The update counts function updates the term and document counts in the
-//   * graph as well as the overall topic count based on the current topic
-//   * assignments of each token (the edge attributes).
-//   *
-//   */
-//  def updateCounts() {
-//    implicit object FactorAccumParam extends AccumulatorParam[Factor] {
-//      def addInPlace(a: Factor, b: Factor): Factor = { a += b; a }
-//      def zero(initialValue: Factor): Factor = new Factor(nTopics)
-//    }
-//    val accum = sc.accumulator(new Factor(nTopics))
-//
-//    def mapFun(e: EdgeTriplet[Factor, TopicId]): Iterator[(Vid, Factor)] = {
-//      assert(e.attr >= 0)
-//      accum += new Factor(nTopics, e.attr)
-//      Iterator((e.srcId, new Factor(nTopics, e.attr)), (e.dstId, new Factor(nTopics, e.attr)))
-//    }
-//    val newCounts = graph.mapReduceTriplets[Factor](mapFun, (a, b) => { a += b; a } )
-//    graph = graph.outerJoinVertices(newCounts) { (vid, oldFactor, newFactorOpt) => newFactorOpt.get }.cache
-//    // Trigger computation of the topic counts
-//    // TODO: We should uncache the graph at some point.
-//    //graph.cache
-//    graph.vertices.foreach(x => ())
-//    val globalCounts: Factor = accum.value
-//    assert(globalCounts.asCounts().sum == ntokens)
-//    topicC = sc.broadcast(globalCounts.asCounts())
-//  } // end of update counts
-
-//  def topWords(k: Int): Array[Array[(Count, WordId)]] = {
-//    graph.vertices.filter {
-//      case (vid, c) => vid >= 0
-//    }.mapPartitions { items =>
-//      val queues = Array.fill(nTopics)(new BoundedPriorityQueue[(Count, WordId)](k))
-//      for ((wordId, factor) <- items) {
-//        var t = 0
-//        val counts: Array[Count] = factor.asCounts()
-//        while (t < nTopics) {
-//          val tpl: (Count, WordId) = (counts(t), wordId)
-//          queues(t) += tpl
-//          t += 1
-//        }
-//      }
-//      Iterator(queues)
-//    }.reduce { (q1, q2) =>
-//      q1.zip(q2).foreach { case (a,b) => a ++= b }
-//      q1
-//    }.map ( q => q.toArray )
-//  } // end of TopWords
-
-
-
-
+  def topWords(k: Int): Array[Array[(Count, WordId)]] = {
+    val nt = nTopics
+    graph.vertices.filter {
+      case (vid, c) => vid >= 0
+    }.mapPartitions { items =>
+      val queues = Array.fill(nt)(new BoundedPriorityQueue[(Count, WordId)](k))
+      for ((wordId, factor) <- items) {
+        var t = 0
+        while (t < nt) {
+          val tpl: (Count, WordId) = (factor(t), wordId)
+          queues(t) += tpl
+          t += 1
+        }
+      }
+      Iterator(queues)
+    }.reduce { (q1, q2) =>
+      q1.zip(q2).foreach { case (a,b) => a ++= b }
+      q1
+    }.map ( q => q.toArray )
+  } // end of TopWords
 
   def posterior: Posterior = {
     graph.cache()
@@ -317,12 +225,12 @@ object TopicModeling {
       }
     }
 
-    var tokensFile = "/Users/jegonzal/Data/counts.tsv"
-    var dictionaryFile = "/Users/jegonzal/Data/dictionary.txt"
+    var tokensFile = ""
+    var dictionaryFile = ""
     var numVPart = 4
     var numEPart = 4
     var partitionStrategy: Option[PartitionStrategy] = None
-    var nIter = 3
+    var nIter = 50
     var nTopics = 10
     var alpha = 0.1
     var beta  = 0.1
@@ -384,18 +292,25 @@ object TopicModeling {
       Iterator.fill(count)((termId, docId))
     }
 
-//    val rawTokens: RDD[(LDA.WordId, LDA.DocId)] =
-//      sc.parallelize(Array((0L,10L, 10), (0L,11L, 10), (1L, 10L, 1), (1L, 12L, 1)), 4).flatMap {
-//        case (termId, docId, count) =>
-//        assert(termId >= 0)
-//        assert(docId >= 0)
-//        assert(count > 0)
-//        // Iterator((termId, docId))
-//        Iterator.fill(count)((termId, docId))
-//      }
+    val dictionary =
+      if (!dictionaryFile.isEmpty) {
+        scala.io.Source.fromFile(dictionaryFile).getLines.toArray
+      } else {
+        Array.empty
+      }
+
     val model = new LDA(rawTokens, nTopics, alpha, beta)
-  //  model.verify()
     model.iterate(nIter)
+
+    val topWords = model.topWords(5)
+    for (queue <- topWords) {
+      println("word list: ")
+      if (!dictionary.isEmpty) {
+        queue.foreach(t => println("\t(" + t._1 + ", " + dictionary(t._2.toInt - 1) + ")"))
+      } else {
+        queue.foreach(t => println("\t" + t.toString))
+      }
+    }
 
     sc.stop()
 
