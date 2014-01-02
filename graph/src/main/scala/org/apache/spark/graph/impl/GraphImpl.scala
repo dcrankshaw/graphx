@@ -52,7 +52,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     val vdManifest = classManifest[VD]
     val edManifest = classManifest[ED]
 
-    edges.zipEdgePartitions(vTableReplicated.get(true, true)) { (ePart, vPartIter) =>
+    edges.zipEdgePartitions(vTableReplicated.get(true, true)) { (pid, ePart, vPartIter) =>
       val (_, vPart) = vPartIter.next()
       new EdgeTripletIterator(vPart.index, vPart.values, ePart)(vdManifest, edManifest)
     }
@@ -153,8 +153,10 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     println(visited)
   } // end of printLineage
 
-  override def reverse: Graph[VD, ED] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), vertexPlacement, vTableReplicated)
+  override def reverse: Graph[VD, ED] = {
+    val newETable = edges.mapEdgePartitions((pid, part) => part.reverse)
+    new GraphImpl(vertices, newETable, vertexPlacement, vTableReplicated)
+  }
 
   override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
     if (classManifest[VD] equals classManifest[VD2]) {
@@ -171,25 +173,36 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     }
   }
 
-  override def mapEdges[ED2: ClassManifest](f: Edge[ED] => ED2): Graph[VD, ED2] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), vertexPlacement, vTableReplicated)
+  override def mapEdges[ED2: ClassManifest](
+      f: (Pid, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
+    val newETable = edges.mapEdgePartitions((pid, part) => part.map(f(pid, part.iterator)))
+    new GraphImpl(vertices, newETable , vertexPlacement, vTableReplicated)
+  }
 
-  override def mapTriplets[ED2: ClassManifest](f: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
+  override def mapTriplets[ED2: ClassManifest](
+      f: (Pid, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
     // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
     // manifest from GraphImpl (which would require serializing GraphImpl).
     val vdManifest = classManifest[VD]
     val newETable =
-      edges.zipEdgePartitions(vTableReplicated.get(true, true)) { (edgePartition, vTableReplicatedIter) =>
-        val (pid, vPart) = vTableReplicatedIter.next()
+      edges.zipEdgePartitions(vTableReplicated.get(true, true)) {
+        (ePid, edgePartition, vTableReplicatedIter) =>
+        val (vPid, vPart) = vTableReplicatedIter.next()
+        assert(!vTableReplicatedIter.hasNext)
+        assert(ePid == vPid)
         val et = new EdgeTriplet[VD, ED]
-        val newEdgePartition = edgePartition.map { e =>
+        val inputIterator = edgePartition.iterator.map { e =>
           et.set(e)
           et.srcAttr = vPart(e.srcId)
           et.dstAttr = vPart(e.dstId)
-          f(et)
+          et
         }
-        Iterator((pid, newEdgePartition))
-    }
+        // Apply the user function to the vertex partition
+        val outputIter = f(ePid, inputIterator)
+        // Consume the iterator to update the edge attributes
+        val newEdgePartition = edgePartition.map(outputIter)
+        Iterator((ePid, newEdgePartition))
+      }
     new GraphImpl(vertices, new EdgeRDD(newETable), vertexPlacement, vTableReplicated)
   }
 
@@ -225,7 +238,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     ClosureCleaner.clean(merge)
-    val newETable = edges.mapEdgePartitions(_.groupEdges(merge))
+    val newETable = edges.mapEdgePartitions((pid, part) => part.groupEdges(merge))
     new GraphImpl(vertices, newETable, vertexPlacement, vTableReplicated)
   }
 
@@ -252,9 +265,10 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     val activeDirectionOpt = activeSetOpt.map(_._2)
 
     // Map and combine.
-    val preAgg = edges.zipEdgePartitions(vs) { (edgePartition, vTableReplicatedIter) =>
-      val (_, vPart) = vTableReplicatedIter.next()
-
+    val preAgg = edges.zipEdgePartitions(vs) { (ePid, edgePartition, vTableReplicatedIter) =>
+      val (vPid, vPart) = vTableReplicatedIter.next()
+      assert(!vTableReplicatedIter.hasNext)
+      assert(ePid == vPid)
       // Choose scan method
       val activeFraction = vPart.numActives.getOrElse(0) / edgePartition.indexSize.toFloat
       val edgeIter = activeDirectionOpt match {
