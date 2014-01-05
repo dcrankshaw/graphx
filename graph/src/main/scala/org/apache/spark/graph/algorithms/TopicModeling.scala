@@ -64,6 +64,17 @@ object LDA {
     dict
   }
 
+  def makeDictionaryRDD(docs: RDD[String]): RDD[(Long, String)] = {
+    val dictRDD = docs.flatMap({d =>
+      val words = d.split("\\s+").map(_.trim.toLowerCase)
+      words.map {w =>
+        val wordId = abs(w.hashCode().toLong)
+        (wordId, w)
+      }
+    }).distinct
+    dictRDD
+  }
+
 } // end of LDA singleton
 
 
