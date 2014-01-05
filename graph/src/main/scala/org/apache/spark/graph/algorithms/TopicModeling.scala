@@ -243,6 +243,15 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
     }.map ( q => q.toArray )
   } // end of TopWords
 
+  def printTopWords(k: Int, dict: Map[Long, String]) = {
+    val words = topWords(k)
+    for (q <- words) {
+      print("Word List: ")
+      q.foreach(t => print("\t" + dict.get(t._2).getOrElse("NULL")))
+      println("\n")
+    }
+  }
+
   def posterior: Posterior = {
     graph.cache()
     val words = graph.vertices.filter { case (vid, _) => vid >= 0 }
