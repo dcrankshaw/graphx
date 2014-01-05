@@ -5,12 +5,16 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark._
 import org.apache.spark.broadcast._
 import org.apache.spark.util.BoundedPriorityQueue
+// import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
+import scala.collection.mutable
+import scala.math._
 
 object LDA {
   type DocId = Vid
   type WordId = Vid
   type TopicId = Int
   type Count = Int
+  // type Dictionary = mutable.HashMap[Long, String]
 
   type Factor = Array[Count]
 
@@ -33,10 +37,34 @@ object LDA {
     f(topic) += 1
     f
   }
+
+  // TODO: this ignores hash collisions for now
+  def makeTokens(docs: RDD[String]): RDD[(WordId, DocId)] = {
+    // val dictionary = new mutable.HashMap[Long, String]
+    val tokens = docs.flatMap {d =>
+      val docId = abs(d.trim.toLowerCase.hashCode().toLong)
+      val words = d.split("\\s+").map(_.trim.toLowerCase)
+      words.map {w =>
+        val wordId = abs(w.hashCode().toLong)
+        (wordId, docId)
+      }
+    }
+    tokens
+  }
+
+  def makeDictionary(docs: RDD[String]): Map[Long, String] = {
+    val dictRDD = docs.flatMap({d =>
+      val words = d.split("\\s+").map(_.trim.toLowerCase)
+      words.map {w =>
+        val wordId = abs(w.hashCode().toLong)
+        (wordId, w)
+      }
+    }).distinct
+    val dict = dictRDD.collect.toMap
+    dict
+  }
+
 } // end of LDA singleton
-
-
-
 
 
 class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
