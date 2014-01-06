@@ -13,7 +13,7 @@ import org.apache.spark.util.ClosureCleaner
 
 
 /**
- * A Graph RDD that supports computation on graphs.
+ 
  *
  * Graphs are represented using two classes of data: vertex-partitioned and
  * edge-partitioned. `vertices` contains vertex attributes, which are vertex-partitioned. `edges`
@@ -154,6 +154,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
   override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
+    val edManifest = classManifest[ED]
+    val vdManifest = classManifest[VD]
     if (classManifest[VD] equals classManifest[VD2]) {
       // The map preserves type, so we can use incremental replication
       val newVerts = vertices.mapVertexPartitions(_.map(f))
@@ -170,6 +172,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   override def mapEdges[ED2: ClassManifest](
       f: (Pid, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
+    val edManifest = classManifest[ED]
+    val vdManifest = classManifest[VD]
     val newETable = edges.mapEdgePartitions((pid, part) => part.map(f(pid, part.iterator)))
     new GraphImpl(vertices, newETable , routingTable, replicatedVertexView)
   }
@@ -179,6 +183,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
     // manifest from GraphImpl (which would require serializing GraphImpl).
     val vdManifest = classManifest[VD]
+    val edManifest = classManifest[ED]
     val newEdgePartitions =
       edges.zipEdgePartitions(replicatedVertexView.get(true, true)) {
         (ePid, edgePartition, vTableReplicatedIter) =>
@@ -204,11 +209,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def subgraph(
       epred: EdgeTriplet[VD, ED] => Boolean = x => true,
       vpred: (Vid, VD) => Boolean = (a, b) => true): Graph[VD, ED] = {
+    val edManifest = classManifest[ED]
+    val vdManifest = classManifest[VD]
     // Filter the vertices, reusing the partitioner and the index from this graph
     val newVerts = vertices.mapVertexPartitions(_.filter(vpred))
 
     // Filter the edges
-    val edManifest = classManifest[ED]
     val newEdges = new EdgeRDD[ED](triplets.filter { et =>
       vpred(et.srcId, et.srcAttr) && vpred(et.dstId, et.dstAttr) && epred(et)
     }.mapPartitionsWithIndex( { (pid, iter) =>
@@ -226,6 +232,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   override def mask[VD2: ClassManifest, ED2: ClassManifest] (
       other: Graph[VD2, ED2]): Graph[VD, ED] = {
+    val edManifest = classManifest[ED]
+    val vdManifest = classManifest[VD]
     val newVerts = vertices.innerJoin(other.vertices) { (vid, v, w) => v }
     val newEdges = edges.innerJoin(other.edges) { (src, dst, v, w) => v }
     // Reuse the previous ReplicatedVertexView unmodified. The replicated vertices that have been
@@ -249,6 +257,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       reduceFunc: (A, A) => A,
       activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None) = {
 
+    val edManifest = classManifest[ED]
+    val vdManifest = classManifest[VD]
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
 
@@ -313,6 +323,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
       (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2): Graph[VD2, ED] = {
+    val edManifest = classManifest[ED]
+    val vdManifest = classManifest[VD]
     if (classManifest[VD] equals classManifest[VD2]) {
       // updateF preserves type, so we can use incremental replication
       val newVerts = vertices.leftJoin(updates)(updateF)
