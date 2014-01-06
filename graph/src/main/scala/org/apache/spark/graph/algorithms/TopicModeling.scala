@@ -52,6 +52,32 @@ object LDA {
     tokens
   }
 
+  def makeCleanTokens(docs: RDD[String]): RDD[(WordId, DocId)] = {
+    // val dictionary = new mutable.HashMap[Long, String]
+    val tokens = docs.flatMap {d =>
+      val docId = abs(d.trim.toLowerCase.hashCode().toLong)
+      // val words = d.split("\\s+").map(_.trim.toLowerCase)
+      val words = d.split("\\s+").map(_.trim.toLowerCase.replaceAll("[^a-zA-Z0-9\\s]", ""))
+      words.filter(_.length > 2).map {w =>
+        val wordId = abs(w.hashCode().toLong)
+        (wordId, docId)
+      }
+    }
+    tokens
+  }
+
+  def makeCleanDictionary(docs: RDD[String]): Map[Long, String] = {
+    val dictRDD = docs.flatMap({d =>
+      val words = d.split("\\s+").map(_.trim.toLowerCase.replaceAll("[^a-zA-Z0-9\\s]", ""))
+      words.filter((_.length > 2)).map {w =>
+        val wordId = abs(w.hashCode().toLong)
+        (wordId, w)
+      }
+    }).distinct
+    val dict = dictRDD.collect.toMap
+    dict
+  }
+
   def makeDictionary(docs: RDD[String]): Map[Long, String] = {
     val dictRDD = docs.flatMap({d =>
       val words = d.split("\\s+").map(_.trim.toLowerCase)
