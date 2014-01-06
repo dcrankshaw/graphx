@@ -58,7 +58,7 @@ object LDA {
       val docId = abs(d.trim.toLowerCase.hashCode().toLong)
       // val words = d.split("\\s+").map(_.trim.toLowerCase)
       val words = d.split("\\s+").map(_.trim.toLowerCase.replaceAll("[^a-zA-Z0-9\\s]", ""))
-      words.filter(_.length > 2).map {w =>
+      words.filter(_.length > 3).map {w =>
         val wordId = abs(w.hashCode().toLong)
         (wordId, docId)
       }
@@ -69,7 +69,7 @@ object LDA {
   def makeCleanDictionary(docs: RDD[String]): Map[Long, String] = {
     val dictRDD = docs.flatMap({d =>
       val words = d.split("\\s+").map(_.trim.toLowerCase.replaceAll("[^a-zA-Z0-9\\s]", ""))
-      words.filter((_.length > 2)).map {w =>
+      words.filter((_.length > 3)).map {w =>
         val wordId = abs(w.hashCode().toLong)
         (wordId, w)
       }
