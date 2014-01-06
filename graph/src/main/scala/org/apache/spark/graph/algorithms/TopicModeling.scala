@@ -246,9 +246,9 @@ class LDA(@transient val tokens: RDD[(LDA.WordId, LDA.DocId)],
   def printTopWords(k: Int, dict: Map[Long, String]) = {
     val words = topWords(k)
     for (q <- words) {
-      print("Word List: ")
-      q.foreach(t => print("\t" + dict.get(t._2).getOrElse("NULL")))
-      println("\n")
+      print("Word List:\t")
+      q.foreach(t => print(dict.get(t._2).getOrElse("NULL") + ", "))
+      println("")
     }
   }
 
