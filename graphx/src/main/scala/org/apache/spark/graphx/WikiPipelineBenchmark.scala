@@ -30,7 +30,8 @@ object WikiPipelineBenchmark extends Logging {
      case "graphx" => {
        val rawData = args(2)
        val numIters = args(3).toInt
-       benchmarkGraphx(sc, rawData, numIters)
+       val numPRIters = args(4).toInt
+       benchmarkGraphx(sc, rawData, numIters, numPRIters)
      }
 
      case "extract" => {
@@ -57,19 +58,19 @@ object WikiPipelineBenchmark extends Logging {
 
   }
 
-  def benchmarkGraphx(sc: SparkContext, rawData: String, numIters: Int) {
+  def benchmarkGraphx(sc: SparkContext, rawData: String, numIters: Int, numPRIters: Int) {
     val (vertices, edges) = extractLinkGraph(sc, rawData)
     logWarning("creating graph")
     val g = Graph(vertices, edges)
     val cleanG = g.subgraph(x => true, (vid, vd) => vd != null).cache
     logWarning(s"DIRTY graph has ${g.triplets.count()} EDGES, ${g.vertices.count()} VERTICES")
     logWarning(s"CLEAN graph has ${cleanG.triplets.count()} EDGES, ${cleanG.vertices.count()} VERTICES")
-    val resultG = pagerankConnComponentsAlt(numIters, cleanG)
+    val resultG = pagerankConnComponentsAlt(numIters, cleanG, numPRIters)
     logWarning(s"ORIGINAL graph has ${cleanG.triplets.count()} EDGES, ${cleanG.vertices.count()} VERTICES")
     logWarning(s"FINAL graph has ${resultG.triplets.count()} EDGES, ${resultG.vertices.count()} VERTICES")
   }
 
-  def pagerankConnComponentsAlt(numRepetitions: Int, g: Graph[String, Double]): Graph[String, Double] = {
+  def pagerankConnComponentsAlt(numRepetitions: Int, g: Graph[String, Double], numPRIters: Int): Graph[String, Double] = {
     var currentGraph = g
     logWarning("starting iterations")
     for (i <- 0 to numRepetitions) {
@@ -94,7 +95,7 @@ object WikiPipelineBenchmark extends Logging {
       logWarning(s"Connected Components TIMEX: ${(ccEndTime - ccStartTime)/1000.0}")
       logWarning(s"Number of connected components for iteration $i: $numCCs")
       val prStartTime = System.currentTimeMillis
-      val pr = PageRank.run(currentGraph, 20).cache
+      val pr = PageRank.run(currentGraph, numPRIters).cache
       pr.vertices.count
       val prEndTime = System.currentTimeMillis
       logWarning(s"Pagerank TIMEX: ${(prEndTime - prStartTime)/1000.0}")
@@ -113,10 +114,10 @@ object WikiPipelineBenchmark extends Logging {
       val newGraph = currentGraph.subgraph(x => true, filterTop20).cache
       newGraph.vertices.count
       logWarning(s"TOTAL_TIMEX iter $i ${(System.currentTimeMillis - startTime)/1000.0}")
-      currentGraph.unpersistVertices(blocking = false)
-      ccGraph.unpersistVertices(blocking = false)
-      pr.unpersistVertices(blocking = false)
-      prAndTitle.unpersistVertices(blocking = false)
+      // currentGraph.unpersistVertices(blocking = false)
+      // ccGraph.unpersistVertices(blocking = false)
+      // pr.unpersistVertices(blocking = false)
+      // prAndTitle.unpersistVertices(blocking = false)
       currentGraph = newGraph
     }
     currentGraph
