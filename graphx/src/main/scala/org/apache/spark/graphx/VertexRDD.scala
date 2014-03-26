@@ -87,6 +87,10 @@ class VertexRDD[@specialized VD: ClassTag](
     this
   }
 
+  override def clone(): VertexRDD[VD] = {
+    new VertexRDD(partitionsRDD.mapPartitions(_.map(_.clone()), true))
+  }
+
   /** The number of vertices in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_.size).reduce(_ + _)

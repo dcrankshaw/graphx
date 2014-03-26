@@ -66,6 +66,11 @@ class EdgeRDD[@specialized ED: ClassTag](
     this
   }
 
+  override def clone(): EdgeRDD[ED] = {
+    new EdgeRDD(partitionsRDD.mapPartitions(_.map { case (pid, ePart) => (pid, ePart.clone()) },
+                                            true))
+  }
+
   private[graphx] def mapEdgePartitions[ED2: ClassTag](
       f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2]): EdgeRDD[ED2] = {
     new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>

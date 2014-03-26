@@ -39,6 +39,14 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
     val data: Array[ED],
     val index: PrimitiveKeyOpenHashMap[VertexId, Int]) extends Serializable {
 
+  override def clone(): EdgePartition[ED] = {
+    val builder = new EdgePartitionBuilder(size)
+    for (e <- iterator) {
+      builder.add(e.srcId, e.dstId, e.attr)
+    }
+    builder.toEdgePartition
+  }
+
   /**
    * Reverse all the edges in this partition.
    *

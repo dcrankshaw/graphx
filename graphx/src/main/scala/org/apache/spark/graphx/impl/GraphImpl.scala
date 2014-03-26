@@ -79,6 +79,12 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     this
   }
 
+  override def cloneVertices(): Graph[VD, ED] = {
+    val clonedVerts = vertices.clone()
+    new GraphImpl(clonedVerts, edges, routingTable,
+                  new ReplicatedVertexView[VD](clonedVerts, edges, routingTable))
+  }
+
   override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
     val numPartitions = edges.partitions.size
     val edTag = classTag[ED]

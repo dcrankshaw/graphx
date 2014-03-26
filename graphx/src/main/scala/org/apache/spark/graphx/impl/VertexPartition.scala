@@ -62,6 +62,10 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
   /** Return the vertex attribute for the given vertex ID. */
   def apply(vid: VertexId): VD = values(index.getPos(vid))
 
+  override def clone(): VertexPartition[VD] = {
+    VertexPartition(this.iterator)
+  }
+
   def isDefined(vid: VertexId): Boolean = {
     val pos = index.getPos(vid)
     pos >= 0 && mask.get(pos)

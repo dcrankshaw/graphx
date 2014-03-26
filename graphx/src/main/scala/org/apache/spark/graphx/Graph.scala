@@ -102,6 +102,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
 
+  def cloneVertices(): Graph[VD, ED]
+
   /**
    * Repartitions the edges in the graph according to `partitionStrategy`.
    */

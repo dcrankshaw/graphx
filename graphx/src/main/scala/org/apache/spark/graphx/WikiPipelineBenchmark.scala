@@ -80,17 +80,18 @@ object WikiPipelineBenchmark extends Logging {
       // GRAPH VIEW
       val ccStartTime = System.currentTimeMillis
       val ccGraph = ConnectedComponents.run(currentGraph).cache
-      val zeroVal = new JTreeSet[VertexId]()
-      val seqOp = (s: JTreeSet[VertexId], vtuple: (VertexId, VertexId)) => {
-        s.add(vtuple._2)
-        s
-      }
-      val combOp = (s1: JTreeSet[VertexId], s2: JTreeSet[VertexId]) => {
-        s1.addAll(s2)
-        s1
-      }
-      // TABLE VIEW
-      val numCCs = ccGraph.vertices.aggregate(zeroVal)(seqOp, combOp).size()
+      val numCCs = ccGraph.vertices.map{ case (id, cc) => cc }.distinct(1).count
+      // val zeroVal = new JTreeSet[VertexId]()
+      // val seqOp = (s: JTreeSet[VertexId], vtuple: (VertexId, VertexId)) => {
+      //   s.add(vtuple._2)
+      //   s
+      // }
+      // val combOp = (s1: JTreeSet[VertexId], s2: JTreeSet[VertexId]) => {
+      //   s1.addAll(s2)
+      //   s1
+      // }
+      // // TABLE VIEW
+      // val numCCs = ccGraph.vertices.aggregate(zeroVal)(seqOp, combOp).size()
       val ccEndTime = System.currentTimeMillis
       logWarning(s"Connected Components TIMEX: ${(ccEndTime - ccStartTime)/1000.0}")
       logWarning(s"Number of connected components for iteration $i: $numCCs")
@@ -177,16 +178,17 @@ object WikiPipelineBenchmark extends Logging {
     val rankAndTitle = artNames.join(pageranks)
     val top20 = rankAndTitle.top(20)(Ordering.by((entry: (VertexId, (String, Double))) => entry._2._2))
     logWarning(s"Top20 for iteration $iter:\n${top20.mkString("\n")}")
-    val zeroVal = new JTreeSet[VertexId]()
-    val seqOp = (s: JTreeSet[VertexId], vtuple: (VertexId, VertexId)) => {
-      s.add(vtuple._2)
-      s
-    }
-    val combOp = (s1: JTreeSet[VertexId], s2: JTreeSet[VertexId]) => {
-      s1.addAll(s2)
-      s1
-    }
-    val numCCs = connComponents.aggregate(zeroVal)(seqOp, combOp).size()
+    val numCCs = connComponents.map{ case (id, cc) => cc }.distinct(1).count
+    // val zeroVal = new JTreeSet[VertexId]()
+    // val seqOp = (s: JTreeSet[VertexId], vtuple: (VertexId, VertexId)) => {
+    //   s.add(vtuple._2)
+    //   s
+    // }
+    // val combOp = (s1: JTreeSet[VertexId], s2: JTreeSet[VertexId]) => {
+    //   s1.addAll(s2)
+    //   s1
+    // }
+    // val numCCs = connComponents.aggregate(zeroVal)(seqOp, combOp).size()
     logWarning(s"Number of connected components for iteration $iter: $numCCs")
     val top20verts = top20.map(_._1).toSet
     val newVertices = artNames.filter { case (v, d) => !top20verts.contains(v) }
