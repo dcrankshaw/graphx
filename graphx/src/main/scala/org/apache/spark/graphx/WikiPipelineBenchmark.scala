@@ -63,6 +63,7 @@ object WikiPipelineBenchmark extends Logging {
     logWarning("creating graph")
     val g = Graph(vertices, edges)
     val cleanG = g.subgraph(x => true, (vid, vd) => vd != null).cache
+
     logWarning(s"DIRTY graph has ${g.triplets.count()} EDGES, ${g.vertices.count()} VERTICES")
     logWarning(s"CLEAN graph has ${cleanG.triplets.count()} EDGES, ${cleanG.vertices.count()} VERTICES")
     val resultG = pagerankConnComponentsAlt(numIters, cleanG, numPRIters)
